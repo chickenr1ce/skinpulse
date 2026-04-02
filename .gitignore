@@ -1,0 +1,17 @@
+# Secrets
+config.json
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+.env
+
+# Scraping artifacts
+*.png
+sample.html
+
+# IDEs
+.vscode/
+.idea/
