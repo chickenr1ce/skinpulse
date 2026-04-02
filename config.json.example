@@ -1,0 +1,15 @@
+{
+    "api_key": "your-priceempire-api-key-here",
+    "items": [
+        {
+            "name": "Karambit | Black Laminate",
+            "wear": "Well-Worn",
+            "stattrak": false
+        },
+        {
+            "name": "AK-47 | Redline",
+            "wear": "Field-Tested",
+            "stattrak": false
+        }
+    ]
+}
