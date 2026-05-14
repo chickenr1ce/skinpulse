@@ -18,7 +18,8 @@ class PriceEmpireScraper:
         """
         params = {
             "app_id": 730,
-            "currency": "USD"
+            "currency": "EUR",
+            "sources": "buff163,skins"
         }
         
         try:
@@ -40,6 +41,8 @@ class PriceEmpireScraper:
                             prices_dict = {}
                             for p in prices_data:
                                 if isinstance(p, dict) and 'provider_key' in p:
+                                    if p.get('price') is not None:
+                                        p['price'] = p['price'] / 100
                                     prices_dict[p['provider_key']] = p
                             item['prices'] = prices_dict
                             
@@ -55,6 +58,8 @@ class PriceEmpireScraper:
                                 prices_dict = {}
                                 for p in prices_data:
                                     if isinstance(p, dict) and 'provider_key' in p:
+                                        if p.get('price') is not None:
+                                            p['price'] = p['price'] / 100
                                         prices_dict[p['provider_key']] = p
                                 item['prices'] = prices_dict
                     return data
