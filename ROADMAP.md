@@ -6,6 +6,9 @@
 - [x] Price deltas: per-source inline display with green (drop) / red (rise) color coding
 - [x] Sorting: press 1-4 to sort by name/buff/skins/lowest, same key toggles asc/desc
 - [x] Dynamic column widths: adapts to terminal size
+- [x] items.txt watchlist — plain-text format with hot-reload
+- [x] manage.py CLI — add/list/remove commands
+- [x] Portfolio view — press `p` to toggle, shows P&L/ROI per item with live prices
 
 ## Planned
 

@@ -5,8 +5,7 @@ import time
 class PriceEmpireScraper:
     def __init__(self, api_key):
         self.api_key = api_key
-        # Using the trader endpoint as requested
-        self.base_url = "https://api.pricempire.com/v4/trader/items/prices"
+        self.base_url = "https://api.pricempire.com/v4/trader"
         self.headers = {
             "Authorization": f"Bearer {self.api_key}"
         }
@@ -16,6 +15,7 @@ class PriceEmpireScraper:
         Fetches prices for all items or specific items.
         market_hash_names: list of strings (optional)
         """
+        url = f"{self.base_url}/items/prices"
         params = {
             "app_id": 730,
             "currency": "EUR",
@@ -23,7 +23,7 @@ class PriceEmpireScraper:
         }
         
         try:
-            response = requests.get(self.base_url, headers=self.headers, params=params, timeout=30)
+            response = requests.get(url, headers=self.headers, params=params, timeout=30)
             if response.status_code == 200:
                 data = response.json()
                 
@@ -69,6 +69,38 @@ class PriceEmpireScraper:
                 return {"error": f"API status {response.status_code}"}
         except Exception as e:
             return {"error": str(e)}
+
+    def get_portfolio(self, slug):
+        url = f"{self.base_url}/portfolios/{slug}"
+        try:
+            response = requests.get(url, headers=self.headers, timeout=30)
+            if response.status_code == 200:
+                data = response.json()
+                self._normalize_portfolio(data)
+                return data
+            return {"error": f"API status {response.status_code}"}
+        except Exception as e:
+            return {"error": str(e)}
+
+    def _normalize_portfolio(self, data):
+        if not isinstance(data, dict):
+            return
+        stats = data.get("stats", {})
+        if isinstance(stats, dict):
+            for key in ("totalValue", "totalInvested", "totalRealizedPL",
+                        "totalUnrealizedPL", "totalProfit", "change24h"):
+                if key in stats and isinstance(stats[key], (int, float)):
+                    stats[key] = stats[key] / 100
+        for item in data.get("items", []):
+            if isinstance(item, dict):
+                if "currentPrice" in item and isinstance(item["currentPrice"], (int, float)):
+                    item["currentPrice"] = item["currentPrice"] / 100
+                istats = item.get("stats", {})
+                if isinstance(istats, dict):
+                    for key in ("avgBuyPrice", "currentValue", "totalInvested",
+                                "realizedPL", "unrealizedPL", "totalProfit"):
+                        if key in istats and isinstance(istats[key], (int, float)):
+                            istats[key] = istats[key] / 100
 
 def format_market_hash_name(item):
     name = item.get('name')
