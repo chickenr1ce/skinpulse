@@ -92,8 +92,3 @@ def format_market_hash_name(item):
         
     return full_name
 
-if __name__ == "__main__":
-    # Test
-    scraper = PriceEmpireScraper("YOUR_API_KEY")
-    # prices = scraper.get_prices(["★ Karambit | Black Laminate (Well-Worn)"])
-    # print(prices)
