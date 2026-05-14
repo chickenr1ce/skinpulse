@@ -89,7 +89,7 @@ def draw_menu(stdscr):
 
         # Display items
         y = 4
-        stdscr.addstr(y, 2, f"{'Item Name':<50} | {'Buff 163':>10} | {'Skinport':>10} | {'Lowest':>10}", curses.A_REVERSE)
+        stdscr.addstr(y, 2, f"{'Item Name':<50} | {'Buff 163':>10} | {'Skins.com':>10} | {'Lowest':>10}", curses.A_REVERSE)
         y += 1
 
         for item in items_to_track:
@@ -104,13 +104,13 @@ def draw_menu(stdscr):
             price_dict = item_data.get('prices', {})
             
             buff_price = price_dict.get('buff163', {}).get('price', 0.0)
-            skinport_price = price_dict.get('skinport', {}).get('price', 0.0)
+            skins_price = price_dict.get('skins', {}).get('price', 0.0)
             
             # Find lowest price from all providers in the 'prices' dictionary
             all_provider_prices = [v.get('price', 0.0) for k, v in price_dict.items() if isinstance(v, dict) and 'price' in v and v.get('price', 0.0) > 0]
             min_price = min(all_provider_prices) if all_provider_prices else 0.0
 
-            stdscr.addstr(y, 2, f"{mhn[:50]:<50} | {buff_price:>10.2f} | {skinport_price:>10.2f} | {min_price:>10.2f}")
+            stdscr.addstr(y, 2, f"{mhn[:50]:<50} | {buff_price:>10.2f} | {skins_price:>10.2f} | {min_price:>10.2f}")
             y += 1
 
         if loading:
