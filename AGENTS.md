@@ -2,7 +2,7 @@
 
 ## Entrypoint
 
-- **`python3 tui.py`** — the only active executable. `main.py`, `scraper.py`, `scrapersoup.py` are dead/legacy code.
+- **`python3 tui.py`** — the only executable.
 - Dependency: only `requests`. No requirements.txt — install via `pip install requests`.
 - No test, lint, typecheck, or formatter config exists.
 
