@@ -1,8 +1,10 @@
 import curses
 import json
+import os
 import time
 import requests
 from price_empire_scraper import PriceEmpireScraper, format_market_hash_name
+from items import load_items as load_items_file, get_items_mtime
 
 def load_config():
     try:
@@ -64,9 +66,16 @@ def draw_menu(stdscr):
 
     if isinstance(config_data, dict):
         api_key = config_data.get("api_key", api_key)
-        items_to_track = config_data.get("items", [])
-    elif isinstance(config_data, list):
-        items_to_track = config_data
+
+    items_loaded = load_items_file()
+    items_mtime = get_items_mtime()
+    if items_loaded is not None:
+        items_to_track = items_loaded
+    else:
+        if isinstance(config_data, dict):
+            items_to_track = config_data.get("items", [])
+        elif isinstance(config_data, list):
+            items_to_track = config_data
 
     scraper = PriceEmpireScraper(api_key)
 
@@ -121,6 +130,13 @@ def draw_menu(stdscr):
             else:
                 sort_column = col
                 sort_ascending = True
+
+        new_mtime = get_items_mtime()
+        if new_mtime and new_mtime != items_mtime:
+            loaded = load_items_file()
+            if loaded is not None:
+                items_to_track = loaded
+                items_mtime = new_mtime
 
         if error_message:
             stdscr.addstr(2, 2, f"Error: {error_message[:width-10]}", curses.A_BOLD)

@@ -6,6 +6,17 @@
 - Dependency: only `requests`. No requirements.txt — install via `pip install requests`.
 - No test, lint, typecheck, or formatter config exists.
 
+## TUI Keybindings
+
+| Key | Action |
+|-----|--------|
+| `r` | Force refresh (API fetch) |
+| `q` | Quit |
+| `1` - `4` | Sort by that column (name/buff/skins/lowest). Press same key again to toggle asc/desc. ▲/▼ indicator shown in header. |
+| Auto | Refreshes every 300s |
+
+Price deltas show inline after each price: `320.50(-5.20)` — green for drops, red for rises. First load shows `(  ~  )` placeholder.
+
 ## API (PriceEmpire Trader Tier)
 
 - Endpoint: `https://api.pricempire.com/v4/trader/items/prices`
@@ -16,7 +27,40 @@
 ## Config
 
 - `config.json` is gitignored (secrets). Copy `config.json.example` to create it.
-- Format: `{ "api_key": "...", "items": [ { "name": "...", "wear": "...", "stattrak": false } ] }`
+- Format: `{ "api_key": "..." }`
+- The `items` array in `config.json` is a legacy fallback — prefer `items.txt` below.
+
+## Item Management
+
+### Primary: `items.txt` (plain-text watchlist)
+
+One item per line, format: `[ST ]Name[, Wear]`
+
+```
+Karambit | Black Laminate, Well-Worn
+ST AK-47 | Redline, Field-Tested
+M4A1-S | Printstream
+```
+
+- `ST ` prefix = StatTrak.
+- `#` comments are ignored.
+- Name is the full "Weapon | Skin" string (the ★ star is auto-added by `format_market_hash_name()`).
+- Edit in any text editor — the TUI hot-reloads on save via mtime polling (`items.py:get_items_mtime`).
+
+### Fallback: `config.json` items key
+
+If `items.txt` doesn't exist, the TUI falls back to the `"items"` array in `config.json`. Running `manage.py add` migrates existing config.json items into `items.txt` automatically.
+
+### CLI helper: `python3 manage.py <list|add|remove>`
+
+| Command | What it does |
+|---------|-------------|
+| `manage.py list` | Prints all tracked items with indices |
+| `manage.py add` | Interactive prompts (name, wear, stattraut) |
+| `manage.py remove 2` | Remove by index |
+| `manage.py remove Redline` | Remove by name substring (first match) |
+
+`manage.py` always syncs changes to both `items.txt` and `config.json`.
 
 ## Name Formatting Quirk
 
