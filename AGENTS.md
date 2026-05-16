@@ -14,10 +14,10 @@
 | `p` | Toggle between watchlist and portfolio view |
 | `q` | Quit |
 | `1` - `4` | Sort watchlist by column (name/buff/skins/lowest). Press same key again to toggle asc/desc. ▲/▼ indicator shown in header. |
-| `1` - `6` | Sort portfolio by column (name/qty/buy/now/P&L/ROI). Same toggle behavior. |
+| `1` - `6` | Sort portfolio by column (name/qty/buy/now/total/P&L/ROI). Same toggle behavior. |
 | Auto | Refreshes every 300s |
 
-Price deltas show inline after each price: `320.50(-5.20)` — green for drops, red for rises. First load shows `(  ~  )` placeholder.
+Price deltas show inline after each price: `320.50(+5.20)` — green for rises, red for drops. First load shows `(  ~  )` placeholder.
 In portfolio view, P&L and ROI are green for profit, red for loss.
 
 ## API (PriceEmpire Trader Tier)

@@ -21,7 +21,7 @@ def draw_price_col(stdscr, y, x, price, prev_price):
     if delta is not None and abs(delta) >= 0.01:
         price_part = f"{price:>7.2f}("
         delta_part = f"{delta:+.2f}"
-        color = curses.color_pair(1) if delta < 0 else curses.color_pair(2)
+        color = curses.color_pair(1) if delta > 0 else curses.color_pair(2)
         stdscr.addstr(y, x, price_part, curses.A_NORMAL)
         stdscr.addstr(y, x + len(price_part), delta_part, color)
         stdscr.addstr(y, x + len(price_part) + len(delta_part), ")", curses.A_NORMAL)
@@ -65,15 +65,17 @@ def get_portfolio_sort_value(item, prices, sort_column):
         return stats.get('holdings', 0) or 0
     elif sort_column == 2:
         return stats.get('avgBuyPrice', 0.0) or 0.0
-    elif sort_column in (3, 4, 5):
+    elif sort_column in (3, 4, 5, 6):
         live = get_live_price(mhn, prices, item.get('currentPrice', 0.0) or 0.0)
         if sort_column == 3:
             return live
-        avg = stats.get('avgBuyPrice', 0.0) or 0.0
         hld = stats.get('holdings', 0) or 0
         if sort_column == 4:
-            return (live - avg) * hld
+            return live * hld
+        avg = stats.get('avgBuyPrice', 0.0) or 0.0
         if sort_column == 5:
+            return (live - avg) * hld
+        if sort_column == 6:
             return ((live - avg) / avg * 100) if avg > 0 else 0.0
     return 0.0
 
@@ -136,7 +138,7 @@ def draw_menu(stdscr):
             help_text = "'q' quit | 'r' refresh | 'p' portfolio view | '1'-'4' sort"
             stdscr.addstr(height - 1, 0, help_text)
         else:
-            help_text = "'q' quit | 'r' refresh | 'p' watchlist view | '1'-'6' sort"
+            help_text = "'q' quit | 'r' refresh | 'p' watchlist view | '1'-'7' sort"
             stdscr.addstr(height - 1, 0, help_text)
 
         current_time = time.time()
@@ -183,7 +185,7 @@ def draw_menu(stdscr):
             elif current_view == "portfolio":
                 current_view = "watchlist"
 
-        if k in (ord('1'), ord('2'), ord('3'), ord('4'), ord('5'), ord('6')):
+        if k in (ord('1'), ord('2'), ord('3'), ord('4'), ord('5'), ord('6'), ord('7')):
             col = k - ord('1')
             if current_view == "watchlist" and col < 4:
                 if col == sort_column:
@@ -191,7 +193,7 @@ def draw_menu(stdscr):
                 else:
                     sort_column = col
                     sort_ascending = True
-            elif current_view == "portfolio" and col < 6:
+            elif current_view == "portfolio" and col < 7:
                 if col == portfolio_sort_column:
                     portfolio_sort_ascending = not portfolio_sort_ascending
                 else:
@@ -286,13 +288,13 @@ def draw_menu(stdscr):
                 stdscr.addstr(2, 2, summary[:width - 4])
 
                 y = 4
-                p_cols = ["Item Name", "Qty", "Buy", "Now", "P&L", "ROI"]
-                parrows = ["", "", "", "", "", ""]
+                p_cols = ["Item Name", "Qty", "Buy", "Now", "Total", "P&L", "ROI"]
+                parrows = ["", "", "", "", "", "", ""]
                 if portfolio_sort_column < len(p_cols):
                     parrows[portfolio_sort_column] = " ▲" if portfolio_sort_ascending else " ▼"
 
-                p_name_width = max(15, width - (3 + 8 + 14 + 9 + 6 + 3 * 5 + 2 + 2))
-                p_fmt = f"{{:<{p_name_width}}} | {{:>3}} | {{:>8}} | {{:>14}} | {{:>9}} | {{:>6}}"
+                p_name_width = max(15, width - (3 + 8 + 14 + 10 + 9 + 6 + 3 * 6 + 2 + 2))
+                p_fmt = f"{{:<{p_name_width}}} | {{:>3}} | {{:>8}} | {{:>14}} | {{:>10}} | {{:>9}} | {{:>6}}"
                 p_header_str = p_fmt.format(
                     p_cols[0] + parrows[0],
                     p_cols[1] + parrows[1],
@@ -300,6 +302,7 @@ def draw_menu(stdscr):
                     p_cols[3] + parrows[3],
                     p_cols[4] + parrows[4],
                     p_cols[5] + parrows[5],
+                    p_cols[6] + parrows[6],
                 )
                 stdscr.addstr(y, 2, p_header_str, curses.A_REVERSE)
                 y += 1
@@ -340,6 +343,10 @@ def draw_menu(stdscr):
 
                     draw_price_col(stdscr, y, x, live_price, prev_live)
                     x += 14 + 3
+
+                    total_val = live_price * holdings
+                    stdscr.addstr(y, x, f"{total_val:>10.2f}")
+                    x += 10 + 3
 
                     if pl > 0.01:
                         pl_color = curses.color_pair(1)
