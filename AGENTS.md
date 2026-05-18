@@ -59,11 +59,27 @@ If `items.txt` doesn't exist, the TUI falls back to the `"items"` array in `conf
 | Command | What it does |
 |---------|-------------|
 | `manage.py list` | Prints all tracked items with indices |
-| `manage.py add` | Interactive prompts (name, wear, stattraut) |
+| `manage.py add` | Interactive add with weapon search, API validation, and typo detection |
 | `manage.py remove 2` | Remove by index |
 | `manage.py remove Redline` | Remove by name substring (first match) |
 
 `manage.py` always syncs changes to both `items.txt` and `config.json`.
+
+#### `manage.py add` — interactive flow
+
+1. **Weapon selection** — type to fuzzy-search, enter an index, or type `list` to see all weapons.
+   - Accepts flexible input: `ak47`, `ak-47`, `AK 47`, `m4a1s`, `deserteagle` all resolve correctly.
+   - Full-name shortcut: typing `AK-47 Redline` auto-splits into weapon + skin.
+2. **Skin input** — auto-capitalized with correct apostrophe handling (`rameses reach` → `Rameses Reach`).
+3. **Wear** — optional (Factory New, Minimal Wear, Field-Tested, Well-Worn, Battle-Scarred).
+4. **StatTrak** — y/N toggle.
+5. **API validation** — the item is checked against the PriceEmpire API before saving:
+   - **Found** → shows prices from buff163 and skins, then asks for confirmation.
+   - **Not found** → shows similar items ("Did you mean...?") with three options:
+     - `p` — proceed anyway (add despite the warning)
+     - `r` — retry (re-enter the skin name)
+     - `c` — cancel
+   - **API error / no key** → warns but lets you proceed.
 
 ## Name Formatting Quirk
 
