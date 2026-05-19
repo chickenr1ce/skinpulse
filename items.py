@@ -1,78 +1,9 @@
 import os
 import re
 
-ITEMS_FILE = 'items.txt'
+from constants.weapons import WEAPONS
 
-# All CS2 weapons that can have skins. Used for interactive selection.
-WEAPONS = [
-    # Pistols
-    "Glock-18",
-    "USP-S",
-    "P250",
-    "CZ75-Auto",
-    "Tec-9",
-    "Five-SeveN",
-    "Desert Eagle",
-    "R8 Revolver",
-    "Dual Berettas",
-    "P2000",
-    # Rifles
-    "AK-47",
-    "M4A4",
-    "M4A1-S",
-    "AUG",
-    "SG 553",
-    "FAMAS",
-    "Galil AR",
-    "AWP",
-    "SSG 08",
-    "SCAR-20",
-    "G3SG1",
-    # SMGs
-    "MAC-10",
-    "MP9",
-    "MP7",
-    "MP5-SD",
-    "UMP-45",
-    "P90",
-    "PP-Bizon",
-    # Heavy
-    "Nova",
-    "XM1014",
-    "MAG-7",
-    "Sawed-Off",
-    "M249",
-    "Negev",
-    # Knives
-    "Karambit",
-    "M9 Bayonet",
-    "Bayonet",
-    "Butterfly Knife",
-    "Flip Knife",
-    "Gut Knife",
-    "Falchion Knife",
-    "Huntsman Knife",
-    "Bowie Knife",
-    "Shadow Daggers",
-    "Navaja Knife",
-    "Stiletto Knife",
-    "Talon Knife",
-    "Ursus Knife",
-    "Classic Knife",
-    "Paracord Knife",
-    "Survival Knife",
-    "Nomad Knife",
-    "Skeleton Knife",
-    "Kukri Knife",
-    "Clutch Knife",
-    # Gloves
-    "Sport Gloves",
-    "Driver Gloves",
-    "Moto Gloves",
-    "Specialist Gloves",
-    "Bloodhound Gloves",
-    "Hydra Gloves",
-]
+ITEMS_FILE = 'items.txt'
 
 
 def _normalize(s):

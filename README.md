@@ -41,7 +41,7 @@ This launches an interactive flow:
 2. **Skin name** — auto-capitalized automatically (`rameses reach` → `Rameses Reach`).
 3. **Wear** — optional (Factory New, Minimal Wear, Field-Tested, Well-Worn, Battle-Scarred).
 4. **StatTrak** — y/N toggle.
-5. **API validation** — the item is checked against the PriceEmpire API. If not found, similar items are suggested so you can catch typos before saving.
+5. **API validation** — the item is checked against the PriceEmpire API. If not found, similar items are shown as numbered options — pick one to auto-correct the name and wear, or use `r` to retry, `p` to proceed anyway, `c` to cancel.
 
 **Flexible input:** you can type `AK-47 Redline`, `ak47|redline`, or `ak 47 redline` — the parser handles all variations.
 
@@ -88,6 +88,18 @@ Example `config.json`:
     ```bash
     python3 tui.py
     ```
+
+    **Tip:** add a shell alias to launch from anywhere:
+    ```bash
+    # For bash/zsh — add to ~/.bashrc or ~/.zshrc
+    alias cs2prices='cd /path/to/CS2_SkinPrice_Scraper && python3 tui.py'
+    alias cs2prices-manage='cd /path/to/CS2_SkinPrice_Scraper && python3 manage.py'
+
+    # For fish — add to ~/.config/fish/config.fish
+    alias cs2prices 'cd /path/to/CS2_SkinPrice_Scraper && python3 tui.py'
+    alias cs2prices-manage 'cd /path/to/CS2_SkinPrice_Scraper && python3 manage.py'
+    ```
+    Then just type `cs2prices` or `cs2prices-manage add` from anywhere.
 
 2.  **Interface Controls**:
     *   **'r'**: Manually refresh prices (the app also auto-refreshes every 5 minutes).

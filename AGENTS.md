@@ -5,6 +5,7 @@
 - **`python3 tui.py`** — the only executable.
 - Dependency: only `requests`. No requirements.txt — install via `pip install requests`.
 - No test, lint, typecheck, or formatter config exists.
+- Weapon names are defined in `constants/weapons.py` and imported by `items.py` and `manage.py`.
 
 ## TUI Keybindings
 
@@ -75,7 +76,8 @@ If `items.txt` doesn't exist, the TUI falls back to the `"items"` array in `conf
 4. **StatTrak** — y/N toggle.
 5. **API validation** — the item is checked against the PriceEmpire API before saving:
    - **Found** → shows prices from buff163 and skins, then asks for confirmation.
-   - **Not found** → shows similar items ("Did you mean...?") with three options:
+   - **Not found** → shows similar items ("Did you mean...?") as numbered options:
+     - Pick a **number** to auto-correct the skin name and wear from the API, with prices.
      - `p` — proceed anyway (add despite the warning)
      - `r` — retry (re-enter the skin name)
      - `c` — cancel

@@ -142,15 +142,16 @@ def _validate_item(item):
     """Check if the item exists in the PriceEmpire API.
 
     Returns:
-        - (True, price_info) if found — price_info is a dict with buff163/skins prices
-        - (False, available_names) if not found — available_names is a list of similar names
-          that share the same base weapon/skin (for suggestions)
-        - (None, error_msg) if the API call failed
+        - (True, price_info, prices) if found — price_info is a dict with buff163/skins prices,
+          prices is the full API response dict.
+        - (False, available_names, prices) if not found — available_names is a list of similar
+          names that share the same base weapon/skin (for suggestions), prices is the full response.
+        - (None, error_msg, None) if the API call failed.
     """
     config = load_config()
     api_key = config.get('api_key')
     if not api_key:
-        return (None, "No api_key in config.json — skipping API validation.")
+        return (None, "No api_key in config.json — skipping API validation.", None)
 
     scraper = PriceEmpireScraper(api_key)
     market_name = format_market_hash_name(item)
@@ -159,10 +160,10 @@ def _validate_item(item):
     prices = scraper.get_prices()
 
     if isinstance(prices, dict) and 'error' in prices:
-        return (None, f"API error: {prices['error']}")
+        return (None, f"API error: {prices['error']}", None)
 
     if not isinstance(prices, dict):
-        return (None, f"Unexpected API response: {type(prices).__name__}")
+        return (None, f"Unexpected API response: {type(prices).__name__}", None)
 
     if market_name in prices:
         # Found — extract price info
@@ -172,7 +173,7 @@ def _validate_item(item):
             src_data = item_data.get('prices', {}).get(source, {})
             if isinstance(src_data, dict) and src_data.get('price') is not None:
                 price_info[source] = src_data['price']
-        return (True, price_info)
+        return (True, price_info, prices)
 
     # Not found — try to find similar items for suggestions.
     # Extract weapon and skin from the item name, then find API items
@@ -186,15 +187,17 @@ def _validate_item(item):
         # Check if same weapon
         if weapon_part and weapon_part not in api_name.lower():
             continue
-        # Extract skin from API name
+        # Extract skin from API name, stripping wear suffix like "(Factory New)"
         if ' | ' in api_name:
-            api_skin = api_name.split(' | ')[1].lower()
+            api_skin_full = api_name.split(' | ')[1].lower()
+            # Remove trailing wear in parentheses, e.g. "blue phosphor (factory new)" -> "blue phosphor"
+            api_skin = re.sub(r'\s*\(.*?\)\s*$', '', api_skin_full).strip()
             if _skin_similarity(skin_part, api_skin):
                 similar.append(api_name)
                 if len(similar) >= 5:
                     break
 
-    return (False, similar)
+    return (False, similar, prices)
 
 
 def cmd_add():
@@ -237,55 +240,89 @@ def cmd_add():
     print(f"\nPreview: {line}")
 
     # Step 5: API validation
-    found, result = _validate_item(item)
+    found, result, prices_data = _validate_item(item)
 
     if found is None:
         # API error or no key — warn but let user proceed
         print(f"  {result}")
     elif not found:
-        # Item not found — show suggestions
         similar = result
         print(f"\n  ⚠  '{format_market_hash_name(item)}' not found in API.")
         if similar:
             print("  Did you mean one of these?")
-            for s in similar:
-                print(f"    • {s}")
-        print()
-        choice = _safe_input("Proceed anyway (p) / Retry (r) / Cancel (c): ").strip().lower()
-        if choice in ('c', ''):
-            print("Cancelled.")
-            return
-        elif choice in ('r',):
-            # Restart the skin prompt
+            for i, s in enumerate(similar):
+                print(f"    {i + 1}) {s}")
+
+        # Loop until a definitive action is taken
+        while True:
             print()
-            skin = _safe_input("Skin (e.g. 'Redline')> ").strip()
-            if not skin:
+            choice = _safe_input(
+                "Choose a number, or (p)roceed anyway / (r)etry / (c)ancel: "
+            ).strip().lower()
+
+            if not choice or choice in ('c',):
                 print("Cancelled.")
                 return
-            skin = _capitalize_skin(skin)
-            name = f"{weapon} | {skin}"
-            item = {"name": name, "wear": wear, "stattrak": stattrak}
-            line = format_item_line(item)
-            print(f"\nPreview: {line}")
-            # Re-validate
-            found2, result2 = _validate_item(item)
-            if found2 is None:
-                print(f"  {result2}")
-            elif not found2:
-                similar2 = result2
-                print(f"\n  ⚠  '{format_market_hash_name(item)}' not found in API.")
-                if similar2:
-                    print("  Did you mean one of these?")
-                    for s in similar2:
-                        print(f"    • {s}")
+
+            if choice in ('p', 'y'):
+                break  # proceed with original (unfound) item
+
+            if choice in ('r',):
+                # Re-prompt for skin name
                 print()
-                choice2 = _safe_input("Proceed anyway (p) / Cancel (c): ").strip().lower()
-                if choice2 in ('c', ''):
+                skin = _safe_input("Skin (e.g. 'Redline')> ").strip()
+                if not skin:
                     print("Cancelled.")
                     return
-        elif choice not in ('p', 'y'):
-            print("Cancelled.")
-            return
+                skin = _capitalize_skin(skin)
+                name = f"{weapon} | {skin}"
+                item = {"name": name, "wear": wear, "stattrak": stattrak}
+                line = format_item_line(item)
+                print(f"\nPreview: {line}")
+                found, result, prices_data = _validate_item(item)
+                if found is None:
+                    print(f"  {result}")
+                    break
+                if found:
+                    break
+                # Still not found — show suggestions again and loop
+                similar = result
+                print(f"\n  ⚠  '{format_market_hash_name(item)}' not found in API.")
+                if similar:
+                    print("  Did you mean one of these?")
+                    for i, s in enumerate(similar):
+                        print(f"    {i + 1}) {s}")
+                continue
+
+            # Try number selection — pick a suggestion
+            try:
+                idx = int(choice) - 1
+                if 0 <= idx < len(similar):
+                    api_name = similar[idx]
+                    # Parse name and wear from API market hash name
+                    m = re.match(r'^(.+?)\s*\(([^)]+)\)\s*$', api_name)
+                    if m:
+                        name = m.group(1).strip()
+                        selected_wear = m.group(2).strip()
+                    else:
+                        name = api_name
+                        selected_wear = None
+                    item = {"name": name, "wear": selected_wear, "stattrak": stattrak}
+                    line = format_item_line(item)
+                    # Look up prices from cached API data
+                    item_data = prices_data.get(api_name, {})
+                    price_info = {}
+                    for source in ('buff163', 'skins'):
+                        src_data = item_data.get('prices', {}).get(source, {})
+                        if isinstance(src_data, dict) and src_data.get('price') is not None:
+                            price_info[source] = src_data['price']
+                    result = price_info
+                    found = True
+                    break
+            except (ValueError, IndexError):
+                pass
+
+            print("  Invalid choice.")
 
     # Step 6: Final confirmation
     if found is True:
