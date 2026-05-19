@@ -49,6 +49,7 @@ M4A1-S | Printstream
 - `ST ` prefix = StatTrak.
 - `#` comments are ignored.
 - Name is the full "Weapon | Skin" string (the ★ star is auto-added by `format_market_hash_name()`).
+- Wear accepts short codes: `fn`, `mw`, `ft`, `ww`, `bs` (e.g. `AK-47 | Redline, ft`).
 - Edit in any text editor — the TUI hot-reloads on save via mtime polling (`items.py:get_items_mtime`).
 
 ### Fallback: `config.json` items key
@@ -72,7 +73,7 @@ If `items.txt` doesn't exist, the TUI falls back to the `"items"` array in `conf
    - Accepts flexible input: `ak47`, `ak-47`, `AK 47`, `m4a1s`, `deserteagle` all resolve correctly.
    - Full-name shortcut: typing `AK-47 Redline` auto-splits into weapon + skin.
 2. **Skin input** — auto-capitalized with correct apostrophe handling (`rameses reach` → `Rameses Reach`).
-3. **Wear** — optional (Factory New, Minimal Wear, Field-Tested, Well-Worn, Battle-Scarred).
+3. **Wear** — optional. Accepts short codes: `fn`, `mw`, `ft`, `ww`, `bs` (or full names like `Factory New`).
 4. **StatTrak** — y/N toggle.
 5. **API validation** — the item is checked against the PriceEmpire API before saving:
    - **Found** → shows prices from buff163 and skins, then asks for confirmation.

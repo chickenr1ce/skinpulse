@@ -2,8 +2,16 @@ import os
 import re
 
 from constants.weapons import WEAPONS
+from constants.wear import WEAR_MAP
 
 ITEMS_FILE = 'items.txt'
+
+
+def normalize_wear(wear):
+    """Convert short wear codes to full names. Pass through full names unchanged."""
+    if not wear:
+        return wear
+    return WEAR_MAP.get(wear.lower().strip(), wear)
 
 
 def _normalize(s):
@@ -152,7 +160,7 @@ def parse_item_line(line):
     if ',' in line:
         parts = line.split(',', 1)
         name = parts[0].strip()
-        wear = parts[1].strip() if parts[1].strip() else None
+        wear = normalize_wear(parts[1].strip()) if parts[1].strip() else None
     else:
         name = line.strip()
         wear = None

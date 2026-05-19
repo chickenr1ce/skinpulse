@@ -39,7 +39,7 @@ This launches an interactive flow:
 
 1. **Weapon selection** — type to fuzzy-search (e.g. `ak47`, `m4a1s`, `glock`), enter an index, or type `list` to see all weapons.
 2. **Skin name** — auto-capitalized automatically (`rameses reach` → `Rameses Reach`).
-3. **Wear** — optional (Factory New, Minimal Wear, Field-Tested, Well-Worn, Battle-Scarred).
+3. **Wear** — optional. Accepts short codes: `fn`, `mw`, `ft`, `ww`, `bs` (or full names like `Factory New`).
 4. **StatTrak** — y/N toggle.
 5. **API validation** — the item is checked against the PriceEmpire API. If not found, similar items are shown as numbered options — pick one to auto-correct the name and wear, or use `r` to retry, `p` to proceed anyway, `c` to cancel.
 
@@ -58,6 +58,7 @@ M4A1-S | Printstream
 - `ST ` prefix = StatTrak.
 - `#` comments are ignored.
 - The TUI hot-reloads on save via mtime polling.
+- Wear accepts short codes: `Karambit | Black Laminate, ww` or `M4A1-S | Printstream, fn`.
 
 ### Managing items
 

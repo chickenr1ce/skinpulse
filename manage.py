@@ -4,7 +4,7 @@ import json
 import re
 from items import (
     load_items, save_items, format_item_line,
-    WEAPONS, find_weapon, split_name, _capitalize_skin,
+    WEAPONS, find_weapon, split_name, _capitalize_skin, normalize_wear,
 )
 from price_empire_scraper import PriceEmpireScraper, format_market_hash_name
 
@@ -227,9 +227,11 @@ def cmd_add():
     name = f"{weapon} | {skin}"
 
     # Step 3: Wear
-    wear = _safe_input("Wear (e.g. 'Field-Tested') [none]: ").strip()
+    wear = _safe_input("Wear (fn/mw/ft/ww/bs) [none]: ").strip()
     if not wear:
         wear = None
+    else:
+        wear = normalize_wear(wear)
 
     # Step 4: StatTrak
     st_input = _safe_input("StatTrak? (y/N): ").strip().lower()
