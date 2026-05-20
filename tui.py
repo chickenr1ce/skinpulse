@@ -13,21 +13,8 @@ def load_config():
     except Exception as e:
         return {"error": str(e)}
 
-def draw_price_col(stdscr, y, x, price, prev_price):
-    delta = None
-    if prev_price is not None and price is not None:
-        delta = price - prev_price
-
-    if delta is not None and abs(delta) >= 0.01:
-        price_part = f"{price:>7.2f}("
-        delta_part = f"{delta:+.2f}"
-        color = curses.color_pair(1) if delta > 0 else curses.color_pair(2)
-        stdscr.addstr(y, x, price_part, curses.A_NORMAL)
-        stdscr.addstr(y, x + len(price_part), delta_part, color)
-        stdscr.addstr(y, x + len(price_part) + len(delta_part), ")", curses.A_NORMAL)
-    else:
-        text = f"{price:>7.2f}(  ~  )"
-        stdscr.addstr(y, x, text, curses.A_NORMAL)
+def draw_price_col(stdscr, y, x, price):
+    stdscr.addstr(y, x, f"{price:>8.2f}")
 
 
 def get_sort_value(item, prices, sort_column):
@@ -115,7 +102,6 @@ def draw_menu(stdscr):
 
     last_update = 0
     prices = {}
-    prev_prices = {}
     loading = False
     error_message = ""
     sort_column = 0
@@ -159,7 +145,6 @@ def draw_menu(stdscr):
                 stdscr.addstr(2, 2, "Fetching prices from PriceEmpire...")
             stdscr.refresh()
 
-            prev_prices = prices
             api_response = scraper.get_prices()
 
             if portfolio_slug:
@@ -218,7 +203,7 @@ def draw_menu(stdscr):
             if sort_column < len(col_headers):
                 arrows[sort_column] = " ▲" if sort_ascending else " ▼"
 
-            price_width = 14
+            price_width = 9
             name_width = max(20, width - (price_width * 3 + 3 * 3 + 2 + 2))
 
             header_fmt = f"{{:<{name_width}}} | {{:>{price_width}}} | {{:>{price_width}}} | {{:>{price_width}}}"
@@ -234,15 +219,15 @@ def draw_menu(stdscr):
             sorted_items = sorted(items_to_track, key=lambda i: get_sort_value(i, prices, sort_column),
                                   reverse=not sort_ascending)
 
+            sep_width = name_width + 3 + price_width + 3 + price_width + 3 + price_width
+
             for item in sorted_items:
                 if y >= height - 3:
                     break
 
                 mhn = format_market_hash_name(item)
                 item_data = prices.get(mhn, {})
-                prev_item_data = prev_prices.get(mhn, {})
                 price_dict = item_data.get('prices', {})
-                prev_price_dict = prev_item_data.get('prices', {})
 
                 buff_price = price_dict.get('buff163', {}).get('price', 0.0) or 0.0
                 skins_price = price_dict.get('skins', {}).get('price', 0.0) or 0.0
@@ -250,22 +235,23 @@ def draw_menu(stdscr):
                                        if isinstance(v, dict) and v.get('price', 0.0) > 0]
                 min_price = min(all_provider_prices) if all_provider_prices else 0.0
 
-                prev_buff = prev_price_dict.get('buff163', {}).get('price') if prev_prices else None
-                prev_skins = prev_price_dict.get('skins', {}).get('price') if prev_prices else None
-
                 x = 2
                 stdscr.addstr(y, x, f"{mhn[:name_width]:<{name_width}}")
                 x += name_width + 3
 
-                draw_price_col(stdscr, y, x, buff_price, prev_buff)
+                draw_price_col(stdscr, y, x, buff_price)
                 x += price_width + 3
 
-                draw_price_col(stdscr, y, x, skins_price, prev_skins)
+                draw_price_col(stdscr, y, x, skins_price)
                 x += price_width + 3
 
-                draw_price_col(stdscr, y, x, min_price, None)
+                draw_price_col(stdscr, y, x, min_price)
 
                 y += 1
+
+                if y < height - 3:
+                    stdscr.addstr(y, 2, "─" * sep_width)
+                    y += 1
 
         # ── PORTFOLIO VIEW ──
         else:
@@ -293,8 +279,8 @@ def draw_menu(stdscr):
                 if portfolio_sort_column < len(p_cols):
                     parrows[portfolio_sort_column] = " ▲" if portfolio_sort_ascending else " ▼"
 
-                p_name_width = max(15, width - (3 + 8 + 14 + 10 + 9 + 6 + 3 * 6 + 2 + 2))
-                p_fmt = f"{{:<{p_name_width}}} | {{:>3}} | {{:>8}} | {{:>14}} | {{:>10}} | {{:>9}} | {{:>6}}"
+                p_name_width = max(15, width - (3 + 8 + 9 + 10 + 9 + 6 + 3 * 6 + 2 + 2))
+                p_fmt = f"{{:<{p_name_width}}} | {{:>3}} | {{:>8}} | {{:>9}} | {{:>10}} | {{:>9}} | {{:>6}}"
                 p_header_str = p_fmt.format(
                     p_cols[0] + parrows[0],
                     p_cols[1] + parrows[1],
@@ -311,6 +297,8 @@ def draw_menu(stdscr):
                 sorted_p = sorted(p_items, key=lambda i: get_portfolio_sort_value(i, prices, portfolio_sort_column),
                                   reverse=not portfolio_sort_ascending)
 
+                p_sep_width = p_name_width + 3 + 3 + 3 + 8 + 3 + 9 + 3 + 10 + 3 + 9 + 3 + 6
+
                 for item in sorted_p:
                     if y >= height - 3:
                         break
@@ -321,12 +309,6 @@ def draw_menu(stdscr):
                     avg_buy = p_stats.get("avgBuyPrice", 0.0) or 0.0
 
                     live_price = get_live_price(mhn, prices, item.get("currentPrice", 0.0) or 0.0)
-
-                    prev_p_entry = prev_prices.get(mhn, {})
-                    prev_price_dict = prev_p_entry.get("prices", {}) if isinstance(prev_p_entry, dict) else {}
-                    prev_live = prev_price_dict.get("buff163", {}).get("price") if prev_prices else None
-                    if prev_live is None or prev_live <= 0:
-                        prev_live = None
 
                     pl = (live_price - avg_buy) * holdings
                     roi_pct = ((live_price - avg_buy) / avg_buy * 100) if avg_buy > 0 else 0
@@ -341,8 +323,8 @@ def draw_menu(stdscr):
                     stdscr.addstr(y, x, f"{avg_buy:>8.2f}")
                     x += 8 + 3
 
-                    draw_price_col(stdscr, y, x, live_price, prev_live)
-                    x += 14 + 3
+                    draw_price_col(stdscr, y, x, live_price)
+                    x += 9 + 3
 
                     total_val = live_price * holdings
                     stdscr.addstr(y, x, f"{total_val:>10.2f}")
@@ -366,6 +348,10 @@ def draw_menu(stdscr):
                     stdscr.addstr(y, x, f"{roi_pct:>+5.1f}%", roi_color)
 
                     y += 1
+
+                    if y < height - 3:
+                        stdscr.addstr(y, 2, "─" * p_sep_width)
+                        y += 1
 
         if loading:
             stdscr.addstr(height - 2, 2, "Refreshing...")

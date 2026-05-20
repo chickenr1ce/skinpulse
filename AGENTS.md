@@ -5,6 +5,7 @@
 - **`python3 tui.py`** — the only executable.
 - Dependency: only `requests`. No requirements.txt — install via `pip install requests`.
 - No test, lint, typecheck, or formatter config exists.
+- Weapon names are defined in `constants/weapons.py` and imported by `items.py` and `manage.py`.
 
 ## TUI Keybindings
 
@@ -48,6 +49,7 @@ M4A1-S | Printstream
 - `ST ` prefix = StatTrak.
 - `#` comments are ignored.
 - Name is the full "Weapon | Skin" string (the ★ star is auto-added by `format_market_hash_name()`).
+- Wear accepts short codes: `fn`, `mw`, `ft`, `ww`, `bs` (e.g. `AK-47 | Redline, ft`).
 - Edit in any text editor — the TUI hot-reloads on save via mtime polling (`items.py:get_items_mtime`).
 
 ### Fallback: `config.json` items key
@@ -59,11 +61,28 @@ If `items.txt` doesn't exist, the TUI falls back to the `"items"` array in `conf
 | Command | What it does |
 |---------|-------------|
 | `manage.py list` | Prints all tracked items with indices |
-| `manage.py add` | Interactive prompts (name, wear, stattraut) |
+| `manage.py add` | Interactive add with weapon search, API validation, and typo detection |
 | `manage.py remove 2` | Remove by index |
 | `manage.py remove Redline` | Remove by name substring (first match) |
 
 `manage.py` always syncs changes to both `items.txt` and `config.json`.
+
+#### `manage.py add` — interactive flow
+
+1. **Weapon selection** — type to fuzzy-search, enter an index, or type `list` to see all weapons.
+   - Accepts flexible input: `ak47`, `ak-47`, `AK 47`, `m4a1s`, `deserteagle` all resolve correctly.
+   - Full-name shortcut: typing `AK-47 Redline` auto-splits into weapon + skin.
+2. **Skin input** — auto-capitalized with correct apostrophe handling (`rameses reach` → `Rameses Reach`).
+3. **Wear** — optional. Accepts short codes: `fn`, `mw`, `ft`, `ww`, `bs` (or full names like `Factory New`).
+4. **StatTrak** — y/N toggle.
+5. **API validation** — the item is checked against the PriceEmpire API before saving:
+   - **Found** → shows prices from buff163 and skins, then asks for confirmation.
+   - **Not found** → shows similar items ("Did you mean...?") as numbered options:
+     - Pick a **number** to auto-correct the skin name and wear from the API, with prices.
+     - `p` — proceed anyway (add despite the warning)
+     - `r` — retry (re-enter the skin name)
+     - `c` — cancel
+   - **API error / no key** → warns but lets you proceed.
 
 ## Name Formatting Quirk
 

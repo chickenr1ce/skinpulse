@@ -11,7 +11,7 @@ A terminal-based tool to track real-time CS2 skin prices across multiple marketp
 
 1.  **Clone the repository** (if you haven't already):
     ```bash
-    git clone <repository-url>
+    git clone https://github.com/chickenr1ce/CS2_SkinPrice_Scraper.git
     cd CS2_SkinPrice_Scraper
     ```
 
@@ -25,26 +25,62 @@ A terminal-based tool to track real-time CS2 skin prices across multiple marketp
     pip install requests
     ```
 
+## Adding Items
+
+You can add items in two ways:
+
+### Option 1: Interactive CLI (recommended)
+
+```bash
+python3 manage.py add
+```
+
+This launches an interactive flow:
+
+1. **Weapon selection** — type to fuzzy-search (e.g. `ak47`, `m4a1s`, `glock`), enter an index, or type `list` to see all weapons.
+2. **Skin name** — auto-capitalized automatically (`rameses reach` → `Rameses Reach`).
+3. **Wear** — optional. Accepts short codes: `fn`, `mw`, `ft`, `ww`, `bs` (or full names like `Factory New`).
+4. **StatTrak** — y/N toggle.
+5. **API validation** — the item is checked against the PriceEmpire API. If not found, similar items are shown as numbered options — pick one to auto-correct the name and wear, or use `r` to retry, `p` to proceed anyway, `c` to cancel.
+
+**Flexible input:** you can type `AK-47 Redline`, `ak47|redline`, or `ak 47 redline` — the parser handles all variations.
+
+### Option 2: Edit `items.txt` directly
+
+Open `items.txt` in any text editor. One item per line:
+
+```
+Karambit | Black Laminate, Well-Worn
+ST AK-47 | Redline, Field-Tested
+M4A1-S | Printstream
+```
+
+- `ST ` prefix = StatTrak.
+- `#` comments are ignored.
+- The TUI hot-reloads on save via mtime polling.
+- Wear accepts short codes: `Karambit | Black Laminate, ww` or `M4A1-S | Printstream, fn`.
+
+### Managing items
+
+```bash
+python3 manage.py list              # List all tracked items
+python3 manage.py remove 2          # Remove by index
+python3 manage.py remove Redline    # Remove by name substring
+```
+
 ## Configuration
 
 1.  **Open `config.json`** in your preferred text editor.
 2.  **Insert your API Key**: Replace `"YOUR_PRICEEMPIRE_API_KEY"` with your actual PriceEmpire API key (Trader plan is free).
-3.  **Add your Skins**: Update the `items` list with the skins you want to track.
-    *   **Note**: The scraper automatically handles the "★" symbol for knives and formats the name to match the Steam Market Hash Name (e.g., `★ Karambit | Black Laminate (Well-Worn)`).
 
 Example `config.json`:
 ```json
 {
-    "api_key": "your-api-key-here",
-    "items": [
-        {
-            "name": "Karambit | Black Laminate",
-            "wear": "Well-Worn",
-            "stattrak": false
-        }
-    ]
+    "api_key": "your-api-key-here"
 }
 ```
+
+> **Note:** The `items` array in `config.json` is a legacy fallback. Use `items.txt` or `manage.py add` to manage your watchlist instead.
 
 ## How to Run
 
@@ -54,9 +90,24 @@ Example `config.json`:
     python3 tui.py
     ```
 
+    **Tip:** add a shell alias to launch from anywhere:
+    ```bash
+    # For bash/zsh — add to ~/.bashrc or ~/.zshrc
+    alias cs2prices='cd /path/to/CS2_SkinPrice_Scraper && python3 tui.py'
+    alias cs2prices-manage='cd /path/to/CS2_SkinPrice_Scraper && python3 manage.py'
+
+    # For fish — add to ~/.config/fish/config.fish
+    alias cs2prices 'cd /path/to/CS2_SkinPrice_Scraper && python3 tui.py'
+    alias cs2prices-manage 'cd /path/to/CS2_SkinPrice_Scraper && python3 manage.py'
+    ```
+    Then just type `cs2prices` or `cs2prices-manage add` from anywhere.
+
 2.  **Interface Controls**:
     *   **'r'**: Manually refresh prices (the app also auto-refreshes every 5 minutes).
+    *   **'p'**: Toggle between watchlist and portfolio view.
     *   **'q'**: Quit the application.
+    *   **1-4**: Sort watchlist columns (press again to toggle asc/desc).
+    *   **1-6**: Sort portfolio columns (press again to toggle asc/desc).
 
 ## Troubleshooting
 
