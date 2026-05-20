@@ -219,8 +219,6 @@ def draw_menu(stdscr):
             sorted_items = sorted(items_to_track, key=lambda i: get_sort_value(i, prices, sort_column),
                                   reverse=not sort_ascending)
 
-            sep_width = name_width + 3 + price_width + 3 + price_width + 3 + price_width
-
             for item in sorted_items:
                 if y >= height - 3:
                     break
@@ -248,10 +246,6 @@ def draw_menu(stdscr):
                 draw_price_col(stdscr, y, x, min_price)
 
                 y += 1
-
-                if y < height - 3:
-                    stdscr.addstr(y, 2, "─" * sep_width)
-                    y += 1
 
         # ── PORTFOLIO VIEW ──
         else:
@@ -296,8 +290,6 @@ def draw_menu(stdscr):
                 p_items = portfolio.get("items", [])
                 sorted_p = sorted(p_items, key=lambda i: get_portfolio_sort_value(i, prices, portfolio_sort_column),
                                   reverse=not portfolio_sort_ascending)
-
-                p_sep_width = p_name_width + 3 + 3 + 3 + 8 + 3 + 9 + 3 + 10 + 3 + 9 + 3 + 6
 
                 for item in sorted_p:
                     if y >= height - 3:
@@ -348,10 +340,6 @@ def draw_menu(stdscr):
                     stdscr.addstr(y, x, f"{roi_pct:>+5.1f}%", roi_color)
 
                     y += 1
-
-                    if y < height - 3:
-                        stdscr.addstr(y, 2, "─" * p_sep_width)
-                        y += 1
 
         if loading:
             stdscr.addstr(height - 2, 2, "Refreshing...")
