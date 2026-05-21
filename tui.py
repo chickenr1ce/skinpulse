@@ -5,6 +5,7 @@ import time
 import requests
 from price_empire_scraper import PriceEmpireScraper, format_market_hash_name
 from items import load_items as load_items_file, get_items_mtime
+from constants.display import MIN_HEIGHT, MIN_WIDTH
 
 def load_config():
     try:
@@ -13,8 +14,16 @@ def load_config():
     except Exception as e:
         return {"error": str(e)}
 
+def safe_addstr(stdscr, y, x, text, attr=0):
+    """Add string to screen, silently ignoring curses.error if coords are out of bounds."""
+    try:
+        stdscr.addstr(y, x, text, attr)
+    except curses.error:
+        pass
+
+
 def draw_price_col(stdscr, y, x, price):
-    stdscr.addstr(y, x, f"{price:>8.2f}")
+    safe_addstr(stdscr, y, x, f"{price:>8.2f}")
 
 
 def get_sort_value(item, prices, sort_column):
@@ -117,15 +126,25 @@ def draw_menu(stdscr):
         stdscr.clear()
         height, width = stdscr.getmaxyx()
 
+        if height < MIN_HEIGHT or width < MIN_WIDTH:
+            msg = f"Terminal too small — need at least {MIN_WIDTH}x{MIN_HEIGHT}, got {width}x{height}"
+            try:
+                stdscr.addstr(0, 0, msg[:width])
+            except curses.error:
+                pass
+            stdscr.refresh()
+            k = stdscr.getch()
+            continue
+
         header = "CS2 Skin Price Scraper (PriceEmpire API)"
-        stdscr.addstr(0, (width - len(header)) // 2, header, curses.A_BOLD | curses.A_UNDERLINE)
+        safe_addstr(stdscr, 0, (width - len(header)) // 2, header, curses.A_BOLD | curses.A_UNDERLINE)
 
         if current_view == "watchlist":
             help_text = "'q' quit | 'r' refresh | 'p' portfolio view | '1'-'4' sort"
-            stdscr.addstr(height - 1, 0, help_text)
+            safe_addstr(stdscr, height - 1, 0, help_text)
         else:
             help_text = "'q' quit | 'r' refresh | 'p' watchlist view | '1'-'7' sort"
-            stdscr.addstr(height - 1, 0, help_text)
+            safe_addstr(stdscr, height - 1, 0, help_text)
 
         current_time = time.time()
 
@@ -140,9 +159,9 @@ def draw_menu(stdscr):
         if should_refresh:
             loading = True
             if current_view == "portfolio" and portfolio_slug:
-                stdscr.addstr(2, 2, "Fetching prices and portfolio...")
+                safe_addstr(stdscr, 2, 2, "Fetching prices and portfolio...")
             else:
-                stdscr.addstr(2, 2, "Fetching prices from PriceEmpire...")
+                safe_addstr(stdscr, 2, 2, "Fetching prices from PriceEmpire...")
             stdscr.refresh()
 
             api_response = scraper.get_prices()
@@ -195,7 +214,7 @@ def draw_menu(stdscr):
         # ── WATCHLIST VIEW ──
         if current_view == "watchlist":
             if error_message:
-                stdscr.addstr(2, 2, f"Error: {error_message[:width-10]}", curses.A_BOLD)
+                safe_addstr(stdscr, 2, 2, f"Error: {error_message[:width-10]}", curses.A_BOLD)
 
             y = 4
             col_headers = ["Item Name", "Buff 163", "Skins.com", "Lowest"]
@@ -213,7 +232,7 @@ def draw_menu(stdscr):
                 col_headers[2] + arrows[2],
                 col_headers[3] + arrows[3],
             )
-            stdscr.addstr(y, 2, header_str, curses.A_REVERSE)
+            safe_addstr(stdscr, y, 2, header_str, curses.A_REVERSE)
             y += 1
 
             sorted_items = sorted(items_to_track, key=lambda i: get_sort_value(i, prices, sort_column),
@@ -234,7 +253,7 @@ def draw_menu(stdscr):
                 min_price = min(all_provider_prices) if all_provider_prices else 0.0
 
                 x = 2
-                stdscr.addstr(y, x, f"{mhn[:name_width]:<{name_width}}")
+                safe_addstr(stdscr, y, x, f"{mhn[:name_width]:<{name_width}}")
                 x += name_width + 3
 
                 draw_price_col(stdscr, y, x, buff_price)
@@ -250,10 +269,10 @@ def draw_menu(stdscr):
         # ── PORTFOLIO VIEW ──
         else:
             if portfolio_error:
-                stdscr.addstr(2, 2, f"Portfolio error: {portfolio_error[:width - 20]}", curses.A_BOLD)
+                safe_addstr(stdscr, 2, 2, f"Portfolio error: {portfolio_error[:width - 20]}", curses.A_BOLD)
 
             if not portfolio:
-                stdscr.addstr(2, 2, "No portfolio data loaded. Press 'r' to refresh.")
+                safe_addstr(stdscr, 2, 2, "No portfolio data loaded. Press 'r' to refresh.")
             else:
                 p_info = portfolio.get("portfolio", {})
                 p_name = p_info.get("name", portfolio_slug)[:18]
@@ -265,7 +284,7 @@ def draw_menu(stdscr):
                 chg_pct = p_stats.get("change24hPercentage", 0)
 
                 summary = f"Portfolio: {p_name} | Val: €{tv:,.2f} | P&L: €{tp:+.2f} ({troi:+.2f}%) | 24h: €{chg:+.2f} ({chg_pct:+.2f}%)"
-                stdscr.addstr(2, 2, summary[:width - 4])
+                safe_addstr(stdscr, 2, 2, summary[:width - 4])
 
                 y = 4
                 p_cols = ["Item Name", "Qty", "Buy", "Now", "Total", "P&L", "ROI"]
@@ -284,7 +303,7 @@ def draw_menu(stdscr):
                     p_cols[5] + parrows[5],
                     p_cols[6] + parrows[6],
                 )
-                stdscr.addstr(y, 2, p_header_str, curses.A_REVERSE)
+                safe_addstr(stdscr, y, 2, p_header_str, curses.A_REVERSE)
                 y += 1
 
                 p_items = portfolio.get("items", [])
@@ -306,20 +325,20 @@ def draw_menu(stdscr):
                     roi_pct = ((live_price - avg_buy) / avg_buy * 100) if avg_buy > 0 else 0
 
                     x = 2
-                    stdscr.addstr(y, x, f"{mhn[:p_name_width]:<{p_name_width}}")
+                    safe_addstr(stdscr, y, x, f"{mhn[:p_name_width]:<{p_name_width}}")
                     x += p_name_width + 3
 
-                    stdscr.addstr(y, x, f"{holdings:>3}")
+                    safe_addstr(stdscr, y, x, f"{holdings:>3}")
                     x += 3 + 3
 
-                    stdscr.addstr(y, x, f"{avg_buy:>8.2f}")
+                    safe_addstr(stdscr, y, x, f"{avg_buy:>8.2f}")
                     x += 8 + 3
 
                     draw_price_col(stdscr, y, x, live_price)
                     x += 9 + 3
 
                     total_val = live_price * holdings
-                    stdscr.addstr(y, x, f"{total_val:>10.2f}")
+                    safe_addstr(stdscr, y, x, f"{total_val:>10.2f}")
                     x += 10 + 3
 
                     if pl > 0.01:
@@ -328,7 +347,7 @@ def draw_menu(stdscr):
                         pl_color = curses.color_pair(2)
                     else:
                         pl_color = curses.A_NORMAL
-                    stdscr.addstr(y, x, f"{pl:>+9.2f}", pl_color)
+                    safe_addstr(stdscr, y, x, f"{pl:>+9.2f}", pl_color)
                     x += 9 + 3
 
                     if roi_pct > 0.01:
@@ -337,17 +356,17 @@ def draw_menu(stdscr):
                         roi_color = curses.color_pair(2)
                     else:
                         roi_color = curses.A_NORMAL
-                    stdscr.addstr(y, x, f"{roi_pct:>+5.1f}%", roi_color)
+                    safe_addstr(stdscr, y, x, f"{roi_pct:>+5.1f}%", roi_color)
 
                     y += 1
 
         if loading:
-            stdscr.addstr(height - 2, 2, "Refreshing...")
+            safe_addstr(stdscr, height - 2, 2, "Refreshing...")
         elif last_update > 0:
             time_since = int(current_time - last_update)
-            stdscr.addstr(height - 2, 2, f"Last update: {time_since}s ago")
+            safe_addstr(stdscr, height - 2, 2, f"Last update: {time_since}s ago")
         else:
-            stdscr.addstr(height - 2, 2, "No data loaded.")
+            safe_addstr(stdscr, height - 2, 2, "No data loaded.")
 
         stdscr.refresh()
         k = stdscr.getch()
