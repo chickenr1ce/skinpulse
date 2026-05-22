@@ -1,4 +1,4 @@
-"""Shared utility functions for item validation and config sync.
+"""Shared utility functions for item validation and config.
 
 Extracted from manage.py so both manage.py and tui.py can use them.
 """
@@ -24,13 +24,6 @@ def save_config(config):
         json.dump(config, f, indent=4)
 
 
-def sync_config(items):
-    """Update the 'items' array in config.json to match items.txt."""
-    config = load_config()
-    config['items'] = items
-    save_config(config)
-
-
 def _skin_similarity(a, b):
     """Return True if two skin names are likely the same item.
 
@@ -41,16 +34,16 @@ def _skin_similarity(a, b):
     def norm(s):
         return re.sub(r'[\s\'\-]+', '', s).lower()
 
-    na, nb = norm(a), norm(b)
-    if not na or not nb:
+    norm_a, norm_b = norm(a), norm(b)
+    if not norm_a or not norm_b:
         return False
-    if na == nb:
+    if norm_a == norm_b:
         return True
-    if na in nb or nb in na:
+    if norm_a in norm_b or norm_b in norm_a:
         return True
     # Character overlap ratio
-    common = sum(1 for c in na if c in nb)
-    return common / max(len(na), len(nb)) > 0.8
+    common = sum(1 for c in norm_a if c in norm_b)
+    return common / max(len(norm_a), len(norm_b)) > 0.8
 
 
 def validate_item(item, api_key=None, scraper=None, prices_data=None):
@@ -91,9 +84,9 @@ def validate_item(item, api_key=None, scraper=None, prices_data=None):
         item_data = prices[market_name]
         price_info = {}
         for source in ('buff163', 'skins'):
-            src_data = item_data.get('prices', {}).get(source, {})
-            if isinstance(src_data, dict) and src_data.get('price') is not None:
-                price_info[source] = src_data['price']
+            source_data = item_data.get('prices', {}).get(source, {})
+            if isinstance(source_data, dict) and source_data.get('price') is not None:
+                price_info[source] = source_data['price']
         return (True, price_info, prices)
 
     # 3. Not found — find similar items for suggestions
@@ -133,12 +126,34 @@ def parse_suggestion_api_name(api_name):
     rest = rest.lstrip('★ ').strip()
 
     # Extract wear from trailing parentheses
-    m = re.match(r'^(.+?)\s*\(([^)]+)\)\s*$', rest)
-    if m:
-        name = m.group(1).strip()
-        wear = m.group(2).strip()
+    match = re.match(r'^(.+?)\s*\(([^)]+)\)\s*$', rest)
+    if match:
+        name = match.group(1).strip()
+        wear = match.group(2).strip()
     else:
         name = rest.strip()
         wear = None
 
     return {"name": name, "wear": wear, "stattrak": stattrak}
+
+
+def apply_suggestion(similar, idx, prices_data, stattrak=False):
+    """Apply a suggestion pick from the API.
+
+    Given a list of similar API names and a 0-based index, parse the
+    selected name into item fields and look up prices from the API data.
+
+    Returns:
+        (item_dict, price_info) — item_dict has 'name', 'wear', 'stattrak';
+        price_info is {source: price, ...} from prices_data.
+    """
+    api_name = similar[idx]
+    parsed = parse_suggestion_api_name(api_name)
+    parsed['stattrak'] = stattrak
+    item_data = prices_data.get(api_name, {})
+    price_info = {}
+    for source in ('buff163', 'skins'):
+        src_data = item_data.get('prices', {}).get(source, {})
+        if isinstance(src_data, dict) and src_data.get('price') is not None:
+            price_info[source] = src_data['price']
+    return (parsed, price_info)

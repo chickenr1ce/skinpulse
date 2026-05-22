@@ -80,7 +80,7 @@ Example `config.json`:
 }
 ```
 
-> **Note:** The `items` array in `config.json` is a legacy fallback. Use `items.txt` or `manage.py add` to manage your watchlist instead.
+> **Note:** Items are stored exclusively in `items.txt`. The `items` array in `config.json` is no longer used. Use `items.txt` or `manage.py add` to manage your watchlist.
 
 ## How to Run
 

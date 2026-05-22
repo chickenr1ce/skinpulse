@@ -68,3 +68,13 @@ WEAPONS = [
     "Bloodhound Gloves",
     "Hydra Gloves",
 ]
+
+# Knife names that need the ★ prefix in market hash names.
+# Exact-set lookup is more reliable than the old substring check ("Knife" misses Bayonet, Shadow Daggers).
+KNIFE_NAMES = frozenset([
+    "Karambit", "M9 Bayonet", "Bayonet", "Butterfly Knife", "Flip Knife",
+    "Gut Knife", "Falchion Knife", "Huntsman Knife", "Bowie Knife",
+    "Shadow Daggers", "Navaja Knife", "Stiletto Knife", "Talon Knife",
+    "Ursus Knife", "Classic Knife", "Paracord Knife", "Survival Knife",
+    "Nomad Knife", "Skeleton Knife", "Kukri Knife", "Clutch Knife",
+])

@@ -1,12 +1,11 @@
 #!/usr/bin/env python3
 import sys
-import re
 from items import (
     load_items, save_items, format_item_line,
     WEAPONS, find_weapon, split_name, _capitalize_skin, normalize_wear,
 )
 from price_empire_scraper import PriceEmpireScraper, format_market_hash_name
-from utils import _skin_similarity, validate_item, sync_config, load_config, save_config
+from utils import validate_item, load_config, apply_suggestion
 
 
 def _safe_input(prompt=''):
@@ -18,24 +17,16 @@ def _safe_input(prompt=''):
 
 
 def get_all_items():
+    """Return all tracked items from items.txt (the single source of truth)."""
     items = load_items()
-    if items is not None:
-        return items
-    config = load_config()
-    if isinstance(config, list):
-        return config
-    return config.get('items', [])
+    return items if items is not None else []
 
 
 def cmd_list():
     items = get_all_items()
     if not items:
-        items_missing = load_items() is None
-        if items_missing:
-            print("No items.txt found and config.json has no items.")
-        else:
-            print("No items tracked.")
-        print("Run 'python3 manage.py add' to add one.")
+        print("No items tracked.")
+        print("Run 'python3 manage.py add' to add one, or create items.txt.")
         return
     for i, item in enumerate(items):
         print(f"{i}: {format_item_line(item)}")
@@ -132,8 +123,8 @@ def cmd_add():
         wear = normalize_wear(wear)
 
     # Step 4: StatTrak
-    st_input = _safe_input("StatTrak? (y/N): ").strip().lower()
-    stattrak = st_input.startswith('y')
+    response = _safe_input("StatTrak? (y/N): ").strip().lower()
+    stattrak = response.startswith('y')
 
     item = {"name": name, "wear": wear, "stattrak": stattrak}
     line = format_item_line(item)
@@ -200,25 +191,7 @@ def cmd_add():
             try:
                 idx = int(choice) - 1
                 if 0 <= idx < len(similar):
-                    api_name = similar[idx]
-                    # Parse name and wear from API market hash name
-                    m = re.match(r'^(.+?)\s*\(([^)]+)\)\s*$', api_name)
-                    if m:
-                        name = m.group(1).strip()
-                        selected_wear = m.group(2).strip()
-                    else:
-                        name = api_name
-                        selected_wear = None
-                    item = {"name": name, "wear": selected_wear, "stattrak": stattrak}
-                    line = format_item_line(item)
-                    # Look up prices from cached API data
-                    item_data = prices_data.get(api_name, {})
-                    price_info = {}
-                    for source in ('buff163', 'skins'):
-                        src_data = item_data.get('prices', {}).get(source, {})
-                        if isinstance(src_data, dict) and src_data.get('price') is not None:
-                            price_info[source] = src_data['price']
-                    result = price_info
+                    item, result = apply_suggestion(similar, idx, prices_data, stattrak)
                     found = True
                     break
             except (ValueError, IndexError):
@@ -245,7 +218,6 @@ def cmd_add():
     items = get_all_items()
     items.append(item)
     save_items(items)
-    sync_config(items)
     print(f"Added: {line}")
 
 
@@ -267,7 +239,6 @@ def cmd_remove(args):
         if 0 <= idx < len(items):
             item = items.pop(idx)
             save_items(items)
-            sync_config(items)
             print(f"Removed: {format_item_line(item)}")
             return
         else:
@@ -300,7 +271,6 @@ def cmd_remove(args):
 
     items.pop(idx)
     save_items(items)
-    sync_config(items)
     print(f"Removed: {format_item_line(item)}")
 
 

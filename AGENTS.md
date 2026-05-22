@@ -5,7 +5,7 @@
 - **`python3 tui.py`** — the only executable.
 - Dependency: only `requests`. No requirements.txt — install via `pip install requests`.
 - No test, lint, typecheck, or formatter config exists.
-- Weapon names are defined in `constants/weapons.py` and imported by `items.py` and `manage.py`.
+- Weapon names are defined in `constants/weapons.py` and imported by `items.py`, `manage.py`, and `wizard.py`.
 
 ## TUI Keybindings
 
@@ -35,8 +35,8 @@ Scrolling indicator in the help bar shows position (e.g. `↑ 12-17/17 ↓`) whe
 ## Config
 
 - `config.json` is gitignored (secrets). Copy `config.json.example` to create it.
-- Format: `{ "api_key": "..." }`
-- The `items` array in `config.json` is a legacy fallback — prefer `items.txt` below.
+- Format: `{ "api_key": "...", "portfolio_slug": "..." }`
+- `config.json` no longer stores items — use `items.txt` for the watchlist.
 
 ## Item Management
 
@@ -56,10 +56,6 @@ M4A1-S | Printstream
 - Wear accepts short codes: `fn`, `mw`, `ft`, `ww`, `bs` (e.g. `AK-47 | Redline, ft`).
 - Edit in any text editor — the TUI hot-reloads on save via mtime polling (`items.py:get_items_mtime`).
 
-### Fallback: `config.json` items key
-
-If `items.txt` doesn't exist, the TUI falls back to the `"items"` array in `config.json`. Running `manage.py add` migrates existing config.json items into `items.txt` automatically.
-
 ### CLI helper: `python3 manage.py <list|add|remove>`
 
 | Command | What it does |
@@ -69,7 +65,7 @@ If `items.txt` doesn't exist, the TUI falls back to the `"items"` array in `conf
 | `manage.py remove 2` | Remove by index |
 | `manage.py remove Redline` | Remove by name substring (first match) |
 
-`manage.py` always syncs changes to both `items.txt` and `config.json`.
+Items are stored exclusively in `items.txt` (no config.json dual-write).
 
 #### `manage.py add` — interactive flow
 
@@ -88,6 +84,6 @@ If `items.txt` doesn't exist, the TUI falls back to the `"items"` array in `conf
      - `c` — cancel
    - **API error / no key** → warns but lets you proceed.
 
-## Name Formatting Quirk
+## Name Formatting
 
-`format_market_hash_name()` prepends `★` for knives whose name contains `"Karambit"`, `"M9 Bayonet"`, or `"Knife"`. Plain `"Bayonet"` and `"Shadow Daggers"` are missed — manually prefix with `★` in config if needed.
+`format_market_hash_name()` prepends `★` for all knife types using an exact `KNIFE_NAMES` lookup (defined in `constants/weapons.py`). All 21 knife types (including `Bayonet`, `Shadow Daggers`, `Kukri Knife`, etc.) are handled correctly.
