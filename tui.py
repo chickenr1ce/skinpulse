@@ -28,8 +28,8 @@ def safe_addstr(stdscr, y, x, text, attr=0):
         pass
 
 
-def draw_price_col(stdscr, y, x, price):
-    safe_addstr(stdscr, y, x, f"{price:>8.2f}")
+def draw_price_col(stdscr, y, x, price, attr=0):
+    safe_addstr(stdscr, y, x, f"{price:>8.2f}", attr)
 
 
 def draw_centered_box(stdscr, box_y, box_x, box_h, box_w):
@@ -488,7 +488,7 @@ def draw_menu(stdscr):
                 col_headers[3] + arrows[3],
             )
             safe_addstr(stdscr, y, 0, "║")
-            safe_addstr(stdscr, y, 2, header_str, curses.A_REVERSE)
+            safe_addstr(stdscr, y, 2, header_str, curses.A_BOLD)
             safe_addstr(stdscr, y, width - 1, "║")
             y += 1
 
@@ -505,7 +505,7 @@ def draw_menu(stdscr):
             for i, item in enumerate(visible_items):
                 abs_index = watchlist_scroll + i
                 is_cursor = (abs_index == watchlist_cursor) and items_to_track
-                row_attr = curses.A_REVERSE if is_cursor else curses.A_NORMAL
+                row_attr = curses.A_BOLD if is_cursor else curses.A_NORMAL
 
                 mhn = format_market_hash_name(item)
                 item_data = prices.get(mhn, {})
@@ -522,13 +522,13 @@ def draw_menu(stdscr):
                 safe_addstr(stdscr, y, x, f"{mhn[:name_width]:<{name_width}}", row_attr)
                 x += name_width + 3
 
-                draw_price_col(stdscr, y, x, buff_price)
+                draw_price_col(stdscr, y, x, buff_price, row_attr)
                 x += price_width + 3
 
-                draw_price_col(stdscr, y, x, skins_price)
+                draw_price_col(stdscr, y, x, skins_price, row_attr)
                 x += price_width + 3
 
-                draw_price_col(stdscr, y, x, min_price)
+                draw_price_col(stdscr, y, x, min_price, row_attr)
                 safe_addstr(stdscr, y, width - 1, "║", row_attr)
 
                 y += 1
@@ -583,7 +583,7 @@ def draw_menu(stdscr):
                     p_cols[6] + parrows[6],
                 )
                 safe_addstr(stdscr, y, 0, "║")
-                safe_addstr(stdscr, y, 2, p_header_str, curses.A_REVERSE)
+                safe_addstr(stdscr, y, 2, p_header_str, curses.A_BOLD)
                 safe_addstr(stdscr, y, width - 1, "║")
                 y += 1
 
@@ -601,7 +601,7 @@ def draw_menu(stdscr):
                 for i, item in enumerate(visible_p):
                     abs_index = portfolio_scroll + i
                     is_cursor = (abs_index == portfolio_cursor)
-                    row_attr = curses.A_REVERSE if is_cursor else curses.A_NORMAL
+                    row_attr = curses.A_BOLD if is_cursor else curses.A_NORMAL
 
                     mhn = item.get("market_hash_name", "")
                     p_stats = item.get("stats", {})
@@ -624,7 +624,7 @@ def draw_menu(stdscr):
                     safe_addstr(stdscr, y, x, f"{avg_buy:>8.2f}", row_attr)
                     x += 8 + 3
 
-                    draw_price_col(stdscr, y, x, live_price)
+                    draw_price_col(stdscr, y, x, live_price, row_attr)
                     x += 9 + 3
 
                     total_val = live_price * holdings
