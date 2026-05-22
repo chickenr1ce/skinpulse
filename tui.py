@@ -125,9 +125,13 @@ def draw_menu(stdscr):
     watchlist_scroll = 0
     portfolio_scroll = 0
 
+    spinner_frames = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
+    spinner_frame = 0
+
     while k != ord('q'):
         stdscr.clear()
         height, width = stdscr.getmaxyx()
+        banner_height = 4 if height >= 18 else 0
 
         if height < MIN_HEIGHT or width < MIN_WIDTH:
             msg = f"Terminal too small — need at least {MIN_WIDTH}x{MIN_HEIGHT}, got {width}x{height}"
@@ -139,14 +143,22 @@ def draw_menu(stdscr):
             k = stdscr.getch()
             continue
 
-        header = "CS2 Skin Price Scraper (PriceEmpire API)"
-        safe_addstr(stdscr, 0, (width - len(header)) // 2, header, curses.A_BOLD | curses.A_UNDERLINE)
+        if banner_height:
+            banner_art = [
+                "  ▄▄▄  ▄▄▄  ▄▄▄ ",
+                " █▀▀▀ ▀▀▀█ ▀▀▀█ ",
+                " █    █▀▀  █▀▀  ",
+                " ▀▀▀▀ ▄▄▄█ █▄▄▄ ",
+            ]
+            for i, line in enumerate(banner_art):
+                x = (width - len(line)) // 2
+                safe_addstr(stdscr, i, x, line, curses.A_BOLD)
 
         # ── Scroll indicator ──
         scroll_indicator = ""
         if current_view == "watchlist":
             total = len(items_to_track)
-            max_visible = max(1, height - 8)
+            max_visible = max(1, height - 8 - banner_height)
             clamped = max(0, min(watchlist_scroll, max(0, total - max_visible)))
             if total > max_visible:
                 first = clamped + 1
@@ -160,7 +172,7 @@ def draw_menu(stdscr):
                 scroll_indicator = " | " + " ".join(parts)
         else:
             total = len(portfolio.get("items", []))
-            max_visible = max(1, height - 8)
+            max_visible = max(1, height - 8 - banner_height)
             clamped = max(0, min(portfolio_scroll, max(0, total - max_visible)))
             if total > max_visible:
                 first = clamped + 1
@@ -192,10 +204,12 @@ def draw_menu(stdscr):
 
         if should_refresh:
             loading = True
+            spinner_char = spinner_frames[spinner_frame]
+            load_y = banner_height
             if current_view == "portfolio" and portfolio_slug:
-                safe_addstr(stdscr, 2, 2, "Fetching prices and portfolio...")
+                safe_addstr(stdscr, load_y, 2, f"{spinner_char} Fetching prices and portfolio...")
             else:
-                safe_addstr(stdscr, 2, 2, "Fetching prices from PriceEmpire...")
+                safe_addstr(stdscr, load_y, 2, f"{spinner_char} Fetching prices from PriceEmpire...")
             stdscr.refresh()
 
             api_response = scraper.get_prices()
@@ -243,24 +257,24 @@ def draw_menu(stdscr):
         # ── Scrolling ──
         if k == curses.KEY_PPAGE:  # PgUp
             if current_view == "watchlist":
-                watchlist_scroll -= max(1, height - 8)
+                watchlist_scroll -= max(1, height - 8 - banner_height)
             else:
-                portfolio_scroll -= max(1, height - 8)
+                portfolio_scroll -= max(1, height - 8 - banner_height)
         elif k == curses.KEY_NPAGE:  # PgDn
             if current_view == "watchlist":
-                watchlist_scroll += max(1, height - 8)
+                watchlist_scroll += max(1, height - 8 - banner_height)
             else:
-                portfolio_scroll += max(1, height - 8)
+                portfolio_scroll += max(1, height - 8 - banner_height)
         elif k == 21:  # Ctrl-U (half page up)
             if current_view == "watchlist":
-                watchlist_scroll -= max(1, (height - 8) // 2)
+                watchlist_scroll -= max(1, (height - 8 - banner_height) // 2)
             else:
-                portfolio_scroll -= max(1, (height - 8) // 2)
+                portfolio_scroll -= max(1, (height - 8 - banner_height) // 2)
         elif k == 4:  # Ctrl-D (half page down)
             if current_view == "watchlist":
-                watchlist_scroll += max(1, (height - 8) // 2)
+                watchlist_scroll += max(1, (height - 8 - banner_height) // 2)
             else:
-                portfolio_scroll += max(1, (height - 8) // 2)
+                portfolio_scroll += max(1, (height - 8 - banner_height) // 2)
         elif k == ord('g'):
             if current_view == "watchlist":
                 watchlist_scroll = 0
@@ -283,9 +297,12 @@ def draw_menu(stdscr):
         # ── WATCHLIST VIEW ──
         if current_view == "watchlist":
             if error_message:
-                safe_addstr(stdscr, 2, 2, f"Error: {error_message[:width-10]}", curses.A_BOLD)
+                safe_addstr(stdscr, banner_height, 2, f"Error: {error_message[:width-10]}", curses.A_BOLD)
 
-            y = 4
+            y = 4 if banner_height else 0
+            safe_addstr(stdscr, y, 0, "╔" + "═" * (width - 2) + "╗")
+            y += 1
+
             col_headers = ["Item Name", "Buff 163", "Skins.com", "Lowest"]
             arrows = ["", "", "", ""]
             if sort_column < len(col_headers):
@@ -301,13 +318,18 @@ def draw_menu(stdscr):
                 col_headers[2] + arrows[2],
                 col_headers[3] + arrows[3],
             )
+            safe_addstr(stdscr, y, 0, "║")
             safe_addstr(stdscr, y, 2, header_str, curses.A_REVERSE)
+            safe_addstr(stdscr, y, width - 1, "║")
+            y += 1
+
+            safe_addstr(stdscr, y, 0, "╠" + "═" * (width - 2) + "╣")
             y += 1
 
             sorted_items = sorted(items_to_track, key=lambda i: get_sort_value(i, prices, sort_column),
                                   reverse=not sort_ascending)
 
-            max_visible = max(1, height - 8)
+            max_visible = max(1, height - 8 - banner_height)
             watchlist_scroll = max(0, min(watchlist_scroll, max(0, len(sorted_items) - max_visible)))
             visible_items = sorted_items[watchlist_scroll:watchlist_scroll + max_visible]
 
@@ -324,6 +346,7 @@ def draw_menu(stdscr):
                 min_price = min(all_provider_prices) if all_provider_prices else 0.0
 
                 x = 2
+                safe_addstr(stdscr, y, 0, "║")
                 safe_addstr(stdscr, y, x, f"{mhn[:name_width]:<{name_width}}")
                 x += name_width + 3
 
@@ -334,16 +357,27 @@ def draw_menu(stdscr):
                 x += price_width + 3
 
                 draw_price_col(stdscr, y, x, min_price)
+                safe_addstr(stdscr, y, width - 1, "║")
 
                 y += 1
+
+            safe_addstr(stdscr, y, 0, "╚" + "═" * (width - 2) + "╝")
 
         # ── PORTFOLIO VIEW ──
         else:
             if portfolio_error:
-                safe_addstr(stdscr, 2, 2, f"Portfolio error: {portfolio_error[:width - 20]}", curses.A_BOLD)
+                safe_addstr(stdscr, banner_height, 2, f"Portfolio error: {portfolio_error[:width - 20]}", curses.A_BOLD)
+
+            y = 4 if banner_height else 0
+            safe_addstr(stdscr, y, 0, "╔" + "═" * (width - 2) + "╗")
+            y += 1
 
             if not portfolio:
-                safe_addstr(stdscr, 2, 2, "No portfolio data loaded. Press 'r' to refresh.")
+                safe_addstr(stdscr, y, 0, "║")
+                safe_addstr(stdscr, y, 2, "No portfolio data loaded. Press 'r' to refresh.")
+                safe_addstr(stdscr, y, width - 1, "║")
+                y += 1
+                safe_addstr(stdscr, y, 0, "╚" + "═" * (width - 2) + "╝")
             else:
                 p_info = portfolio.get("portfolio", {})
                 p_name = p_info.get("name", portfolio_slug)[:18]
@@ -355,9 +389,11 @@ def draw_menu(stdscr):
                 chg_pct = p_stats.get("change24hPercentage", 0)
 
                 summary = f"Portfolio: {p_name} | Val: €{tv:,.2f} | P&L: €{tp:+.2f} ({troi:+.2f}%) | 24h: €{chg:+.2f} ({chg_pct:+.2f}%)"
-                safe_addstr(stdscr, 2, 2, summary[:width - 4])
+                safe_addstr(stdscr, y, 0, "║")
+                safe_addstr(stdscr, y, 2, summary[:width - 4])
+                safe_addstr(stdscr, y, width - 1, "║")
+                y += 1
 
-                y = 4
                 p_cols = ["Item Name", "Qty", "Buy", "Now", "Total", "P&L", "ROI"]
                 parrows = ["", "", "", "", "", "", ""]
                 if portfolio_sort_column < len(p_cols):
@@ -374,14 +410,19 @@ def draw_menu(stdscr):
                     p_cols[5] + parrows[5],
                     p_cols[6] + parrows[6],
                 )
+                safe_addstr(stdscr, y, 0, "║")
                 safe_addstr(stdscr, y, 2, p_header_str, curses.A_REVERSE)
+                safe_addstr(stdscr, y, width - 1, "║")
+                y += 1
+
+                safe_addstr(stdscr, y, 0, "╠" + "═" * (width - 2) + "╣")
                 y += 1
 
                 p_items = portfolio.get("items", [])
                 sorted_p = sorted(p_items, key=lambda i: get_portfolio_sort_value(i, prices, portfolio_sort_column),
                                   reverse=not portfolio_sort_ascending)
 
-                max_visible = max(1, height - 8)
+                max_visible = max(1, height - 8 - banner_height)
                 portfolio_scroll = max(0, min(portfolio_scroll, max(0, len(sorted_p) - max_visible)))
                 visible_p = sorted_p[portfolio_scroll:portfolio_scroll + max_visible]
 
@@ -398,6 +439,7 @@ def draw_menu(stdscr):
                     roi_pct = ((live_price - avg_buy) / avg_buy * 100) if avg_buy > 0 else 0
 
                     x = 2
+                    safe_addstr(stdscr, y, 0, "║")
                     safe_addstr(stdscr, y, x, f"{mhn[:p_name_width]:<{p_name_width}}")
                     x += p_name_width + 3
 
@@ -431,15 +473,29 @@ def draw_menu(stdscr):
                         roi_color = curses.A_NORMAL
                     safe_addstr(stdscr, y, x, f"{roi_pct:>+5.1f}%", roi_color)
 
+                    safe_addstr(stdscr, y, width - 1, "║")
+
                     y += 1
 
+                safe_addstr(stdscr, y, 0, "╚" + "═" * (width - 2) + "╝")
+
         if loading:
-            safe_addstr(stdscr, height - 2, 2, "Refreshing...")
+            spinner_char = spinner_frames[spinner_frame]
+            safe_addstr(stdscr, height - 2, 2, f"{spinner_char} Refreshing...")
         elif last_update > 0:
-            time_since = int(current_time - last_update)
-            safe_addstr(stdscr, height - 2, 2, f"Last update: {time_since}s ago")
+            elapsed = current_time - last_update
+            remaining = max(0, 300 - elapsed)
+            mins = int(remaining // 60)
+            secs = int(remaining % 60)
+            bar_width = 20
+            filled = min(bar_width, int((elapsed / 300) * bar_width))
+            bar = "█" * filled + "░" * (bar_width - filled)
+            safe_addstr(stdscr, height - 2, 2, f"Next refresh in {mins}:{secs:02d} [{bar}]")
         else:
             safe_addstr(stdscr, height - 2, 2, "No data loaded.")
+
+        if loading:
+            spinner_frame = (spinner_frame + 1) % len(spinner_frames)
 
         stdscr.refresh()
         k = stdscr.getch()
