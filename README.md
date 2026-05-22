@@ -108,6 +108,9 @@ Example `config.json`:
     *   **'q'**: Quit the application.
     *   **1-4**: Sort watchlist columns (press again to toggle asc/desc).
     *   **1-6**: Sort portfolio columns (press again to toggle asc/desc).
+    *   **Ctrl-D / Ctrl-U**: Scroll half-page down/up.
+    *   **PgDn / PgUp**: Scroll full-page down/up.
+    *   **g / G**: Jump to top / bottom of list.
 
 ## Troubleshooting
 

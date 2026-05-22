@@ -122,6 +122,9 @@ def draw_menu(stdscr):
     portfolio_sort_column = 0
     portfolio_sort_ascending = True
 
+    watchlist_scroll = 0
+    portfolio_scroll = 0
+
     while k != ord('q'):
         stdscr.clear()
         height, width = stdscr.getmaxyx()
@@ -139,12 +142,43 @@ def draw_menu(stdscr):
         header = "CS2 Skin Price Scraper (PriceEmpire API)"
         safe_addstr(stdscr, 0, (width - len(header)) // 2, header, curses.A_BOLD | curses.A_UNDERLINE)
 
+        # ── Scroll indicator ──
+        scroll_indicator = ""
         if current_view == "watchlist":
-            help_text = "'q' quit | 'r' refresh | 'p' portfolio view | '1'-'4' sort"
-            safe_addstr(stdscr, height - 1, 0, help_text)
+            total = len(items_to_track)
+            max_visible = max(1, height - 8)
+            clamped = max(0, min(watchlist_scroll, max(0, total - max_visible)))
+            if total > max_visible:
+                first = clamped + 1
+                last = min(clamped + max_visible, total)
+                parts = []
+                if clamped > 0:
+                    parts.append("↑")
+                parts.append(f"{first}-{last}/{total}")
+                if last < total:
+                    parts.append("↓")
+                scroll_indicator = " | " + " ".join(parts)
         else:
-            help_text = "'q' quit | 'r' refresh | 'p' watchlist view | '1'-'7' sort"
-            safe_addstr(stdscr, height - 1, 0, help_text)
+            total = len(portfolio.get("items", []))
+            max_visible = max(1, height - 8)
+            clamped = max(0, min(portfolio_scroll, max(0, total - max_visible)))
+            if total > max_visible:
+                first = clamped + 1
+                last = min(clamped + max_visible, total)
+                parts = []
+                if clamped > 0:
+                    parts.append("↑")
+                parts.append(f"{first}-{last}/{total}")
+                if last < total:
+                    parts.append("↓")
+                scroll_indicator = " | " + " ".join(parts)
+
+        if current_view == "watchlist":
+            help_text = "'q' quit | 'r' ref | 'p' port | '1'-'4' sort | ^D/^U sc | g/G top/bot"
+            safe_addstr(stdscr, height - 1, 0, (help_text + scroll_indicator)[:width])
+        else:
+            help_text = "'q' quit | 'r' ref | 'p' watch | '1'-'7' sort | ^D/^U sc | g/G top/bot"
+            safe_addstr(stdscr, height - 1, 0, (help_text + scroll_indicator)[:width])
 
         current_time = time.time()
 
@@ -197,12 +231,46 @@ def draw_menu(stdscr):
                 else:
                     sort_column = col
                     sort_ascending = True
+                watchlist_scroll = 0
             elif current_view == "portfolio" and col < 7:
                 if col == portfolio_sort_column:
                     portfolio_sort_ascending = not portfolio_sort_ascending
                 else:
                     portfolio_sort_column = col
                     portfolio_sort_ascending = True
+                portfolio_scroll = 0
+
+        # ── Scrolling ──
+        if k == curses.KEY_PPAGE:  # PgUp
+            if current_view == "watchlist":
+                watchlist_scroll -= max(1, height - 8)
+            else:
+                portfolio_scroll -= max(1, height - 8)
+        elif k == curses.KEY_NPAGE:  # PgDn
+            if current_view == "watchlist":
+                watchlist_scroll += max(1, height - 8)
+            else:
+                portfolio_scroll += max(1, height - 8)
+        elif k == 21:  # Ctrl-U (half page up)
+            if current_view == "watchlist":
+                watchlist_scroll -= max(1, (height - 8) // 2)
+            else:
+                portfolio_scroll -= max(1, (height - 8) // 2)
+        elif k == 4:  # Ctrl-D (half page down)
+            if current_view == "watchlist":
+                watchlist_scroll += max(1, (height - 8) // 2)
+            else:
+                portfolio_scroll += max(1, (height - 8) // 2)
+        elif k == ord('g'):
+            if current_view == "watchlist":
+                watchlist_scroll = 0
+            else:
+                portfolio_scroll = 0
+        elif k == ord('G'):
+            if current_view == "watchlist":
+                watchlist_scroll = 10**9
+            else:
+                portfolio_scroll = 10**9
 
         new_mtime = get_items_mtime()
         if new_mtime and new_mtime != items_mtime:
@@ -210,6 +278,7 @@ def draw_menu(stdscr):
             if loaded is not None:
                 items_to_track = loaded
                 items_mtime = new_mtime
+                watchlist_scroll = 0
 
         # ── WATCHLIST VIEW ──
         if current_view == "watchlist":
@@ -238,9 +307,11 @@ def draw_menu(stdscr):
             sorted_items = sorted(items_to_track, key=lambda i: get_sort_value(i, prices, sort_column),
                                   reverse=not sort_ascending)
 
-            for item in sorted_items:
-                if y >= height - 3:
-                    break
+            max_visible = max(1, height - 8)
+            watchlist_scroll = max(0, min(watchlist_scroll, max(0, len(sorted_items) - max_visible)))
+            visible_items = sorted_items[watchlist_scroll:watchlist_scroll + max_visible]
+
+            for item in visible_items:
 
                 mhn = format_market_hash_name(item)
                 item_data = prices.get(mhn, {})
@@ -310,9 +381,11 @@ def draw_menu(stdscr):
                 sorted_p = sorted(p_items, key=lambda i: get_portfolio_sort_value(i, prices, portfolio_sort_column),
                                   reverse=not portfolio_sort_ascending)
 
-                for item in sorted_p:
-                    if y >= height - 3:
-                        break
+                max_visible = max(1, height - 8)
+                portfolio_scroll = max(0, min(portfolio_scroll, max(0, len(sorted_p) - max_visible)))
+                visible_p = sorted_p[portfolio_scroll:portfolio_scroll + max_visible]
+
+                for item in visible_p:
 
                     mhn = item.get("market_hash_name", "")
                     p_stats = item.get("stats", {})
