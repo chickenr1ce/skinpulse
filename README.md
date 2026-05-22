@@ -1,6 +1,6 @@
-# CS2 Skin Price Scraper (PriceEmpire Edition)
+# Skinpulse
 
-A terminal-based tool to track real-time CS2 skin prices across multiple marketplaces using the PriceEmpire API.
+A terminal-based tool to track real-time skin prices across multiple marketplaces using the PriceEmpire API.
 
 ## Prerequisites
 
@@ -93,14 +93,14 @@ Example `config.json`:
     **Tip:** add a shell alias to launch from anywhere:
     ```bash
     # For bash/zsh — add to ~/.bashrc or ~/.zshrc
-    alias cs2prices='cd /path/to/CS2_SkinPrice_Scraper && python3 tui.py'
-    alias cs2prices-manage='cd /path/to/CS2_SkinPrice_Scraper && python3 manage.py'
+    alias skinpulse='cd /path/to/CS2_SkinPrice_Scraper && python3 tui.py'
+    alias skinpulse-manage='cd /path/to/CS2_SkinPrice_Scraper && python3 manage.py'
 
     # For fish — add to ~/.config/fish/config.fish
-    alias cs2prices 'cd /path/to/CS2_SkinPrice_Scraper && python3 tui.py'
-    alias cs2prices-manage 'cd /path/to/CS2_SkinPrice_Scraper && python3 manage.py'
+    alias skinpulse 'cd /path/to/CS2_SkinPrice_Scraper && python3 tui.py'
+    alias skinpulse-manage 'cd /path/to/CS2_SkinPrice_Scraper && python3 manage.py'
     ```
-    Then just type `cs2prices` or `cs2prices-manage add` from anywhere.
+    Then just type `skinpulse` or `skinpulse-manage add` from anywhere.
 
 2.  **Interface Controls**:
     *   **'r'**: Manually refresh prices (the app also auto-refreshes every 5 minutes).

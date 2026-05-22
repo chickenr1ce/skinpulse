@@ -1,4 +1,4 @@
-# CS2 SkinPrice Scraper
+# Skinpulse
 
 ## Entrypoint
 

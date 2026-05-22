@@ -1,5 +1,6 @@
 # Secrets
 config.json
+items.txt
 
 # Python
 __pycache__/

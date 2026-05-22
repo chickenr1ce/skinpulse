@@ -1,14 +1,12 @@
 #!/usr/bin/env python3
 import sys
-import json
 import re
 from items import (
     load_items, save_items, format_item_line,
     WEAPONS, find_weapon, split_name, _capitalize_skin, normalize_wear,
 )
 from price_empire_scraper import PriceEmpireScraper, format_market_hash_name
-
-CONFIG_FILE = 'config.json'
+from utils import _skin_similarity, validate_item, sync_config, load_config, save_config
 
 
 def _safe_input(prompt=''):
@@ -17,47 +15,6 @@ def _safe_input(prompt=''):
         return input(prompt)
     except EOFError:
         return ''
-
-
-def _skin_similarity(a, b):
-    """Return True if two skin names are likely the same item.
-
-    Compares normalized strings (lowercase, no spaces/punctuation).
-    Returns True if one is a substring of the other or they share
-    >80% of characters in common.
-    """
-    def norm(s):
-        return re.sub(r'[\s\'\-]+', '', s).lower()
-
-    na, nb = norm(a), norm(b)
-    if not na or not nb:
-        return False
-    if na == nb:
-        return True
-    if na in nb or nb in na:
-        return True
-    # Character overlap ratio
-    common = sum(1 for c in na if c in nb)
-    return common / max(len(na), len(nb)) > 0.8
-
-
-def load_config():
-    try:
-        with open(CONFIG_FILE, 'r') as f:
-            return json.load(f)
-    except FileNotFoundError:
-        return {}
-
-
-def save_config(config):
-    with open(CONFIG_FILE, 'w') as f:
-        json.dump(config, f, indent=4)
-
-
-def sync_config(items):
-    config = load_config()
-    config['items'] = items
-    save_config(config)
 
 
 def get_all_items():
@@ -138,66 +95,7 @@ def _select_weapon():
         print(f"\n  {len(matches)} matches. Pick a number or refine your search.\n")
 
 
-def _validate_item(item):
-    """Check if the item exists in the PriceEmpire API.
 
-    Returns:
-        - (True, price_info, prices) if found — price_info is a dict with buff163/skins prices,
-          prices is the full API response dict.
-        - (False, available_names, prices) if not found — available_names is a list of similar
-          names that share the same base weapon/skin (for suggestions), prices is the full response.
-        - (None, error_msg, None) if the API call failed.
-    """
-    config = load_config()
-    api_key = config.get('api_key')
-    if not api_key:
-        return (None, "No api_key in config.json — skipping API validation.", None)
-
-    scraper = PriceEmpireScraper(api_key)
-    market_name = format_market_hash_name(item)
-
-    print(f"\n  Checking API for: {market_name}")
-    prices = scraper.get_prices()
-
-    if isinstance(prices, dict) and 'error' in prices:
-        return (None, f"API error: {prices['error']}", None)
-
-    if not isinstance(prices, dict):
-        return (None, f"Unexpected API response: {type(prices).__name__}", None)
-
-    if market_name in prices:
-        # Found — extract price info
-        item_data = prices[market_name]
-        price_info = {}
-        for source in ('buff163', 'skins'):
-            src_data = item_data.get('prices', {}).get(source, {})
-            if isinstance(src_data, dict) and src_data.get('price') is not None:
-                price_info[source] = src_data['price']
-        return (True, price_info, prices)
-
-    # Not found — try to find similar items for suggestions.
-    # Extract weapon and skin from the item name, then find API items
-    # with the same weapon and a similar skin name.
-    similar = []
-    item_name = item.get('name', '')  # e.g. "Glock-18 | Rameses Reachh"
-    weapon_part = item_name.split(' | ')[0].lower() if ' | ' in item_name else ''
-    skin_part = item_name.split(' | ')[1].lower() if ' | ' in item_name else ''
-
-    for api_name in prices:
-        # Check if same weapon
-        if weapon_part and weapon_part not in api_name.lower():
-            continue
-        # Extract skin from API name, stripping wear suffix like "(Factory New)"
-        if ' | ' in api_name:
-            api_skin_full = api_name.split(' | ')[1].lower()
-            # Remove trailing wear in parentheses, e.g. "blue phosphor (factory new)" -> "blue phosphor"
-            api_skin = re.sub(r'\s*\(.*?\)\s*$', '', api_skin_full).strip()
-            if _skin_similarity(skin_part, api_skin):
-                similar.append(api_name)
-                if len(similar) >= 5:
-                    break
-
-    return (False, similar, prices)
 
 
 def cmd_add():
@@ -242,7 +140,9 @@ def cmd_add():
     print(f"\nPreview: {line}")
 
     # Step 5: API validation
-    found, result, prices_data = _validate_item(item)
+    config_data = load_config()
+    api_key = config_data.get('api_key')
+    found, result, prices_data = validate_item(item, api_key=api_key)
 
     if found is None:
         # API error or no key — warn but let user proceed
@@ -281,7 +181,7 @@ def cmd_add():
                 item = {"name": name, "wear": wear, "stattrak": stattrak}
                 line = format_item_line(item)
                 print(f"\nPreview: {line}")
-                found, result, prices_data = _validate_item(item)
+                found, result, prices_data = validate_item(item, api_key=api_key)
                 if found is None:
                     print(f"  {result}")
                     break
