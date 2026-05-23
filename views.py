@@ -10,7 +10,7 @@ from wizard import safe_addstr
 
 
 def draw_price_col(stdscr, y, x, price, attr=0):
-    safe_addstr(stdscr, y, x, f"{price:>8.2f}", attr)
+    safe_addstr(stdscr, y, x, f"{price:>9.2f}", attr)
 
 
 def compute_scroll_indicator(total, scroll, max_visible):
@@ -103,7 +103,7 @@ def render_watchlist(stdscr, y, width, items_to_track, prices,
     price_width = 9
     name_width = max(20, width - (price_width * 3 + 3 * 3 + 2 + 2))
 
-    header_fmt = f"{{:<{name_width}}} | {{:>{price_width}}} | {{:>{price_width}}} | {{:>{price_width}}}"
+    header_fmt = f"{{:<{name_width}}} | {{:<{price_width}}} | {{:<{price_width}}} | {{:<{price_width}}}"
     header_str = header_fmt.format(
         col_headers[0] + arrows[0],
         col_headers[1] + arrows[1],
