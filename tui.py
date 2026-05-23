@@ -40,7 +40,7 @@ def draw_menu(stdscr):
     prices = {}
     loading = False
     error_message = ""
-    sort_column = 0
+    sort_column = 1
     sort_ascending = True
 
     portfolio = {}
