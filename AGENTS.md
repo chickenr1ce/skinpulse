@@ -36,7 +36,6 @@ Scrolling indicator in the help bar shows position (e.g. `↑ 12-17/17 ↓`) whe
 
 - `config.json` is gitignored (secrets). Copy `config.json.example` to create it.
 - Format: `{ "api_key": "...", "portfolio_slug": "..." }`
-- `config.json` no longer stores items — use `items.txt` for the watchlist.
 
 ## Item Management
 
@@ -65,7 +64,7 @@ M4A1-S | Printstream
 | `manage.py remove 2` | Remove by index |
 | `manage.py remove Redline` | Remove by name substring (first match) |
 
-Items are stored exclusively in `items.txt` (no config.json dual-write).
+Items are stored exclusively in `items.txt`.
 
 #### `manage.py add` — interactive flow
 

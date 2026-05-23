@@ -28,8 +28,8 @@ def draw_centered_box(stdscr, box_y, box_x, box_h, box_w):
         return
     safe_addstr(stdscr, box_y, box_x, "╔" + "═" * (box_w - 2) + "╗")
     for row in range(1, box_h - 1):
-        safe_addstr(stdscr, box_y + r, box_x, "║")
-        safe_addstr(stdscr, box_y + r, box_x + box_w - 1, "║")
+        safe_addstr(stdscr, box_y + row, box_x, "║")
+        safe_addstr(stdscr, box_y + row, box_x + box_w - 1, "║")
     safe_addstr(stdscr, box_y + box_h - 1, box_x, "╚" + "═" * (box_w - 2) + "╝")
 
 
@@ -129,7 +129,7 @@ def _wizard_weapon_search(stdscr, width, height):
     while True:
         # Clear area
         for row in range(box_h):
-            safe_addstr(stdscr, box_y + r, box_x, " " * box_w)
+            safe_addstr(stdscr, box_y + row, box_x, " " * box_w)
 
         _wizard_draw_box(stdscr, box_h, box_w, box_y, box_x)
 
@@ -223,7 +223,7 @@ def _wizard_validate_step(stdscr, width, height, item, api_key, scraper, prices_
 
     # Clear area
     for row in range(box_h):
-        safe_addstr(stdscr, box_y + r, box_x, " " * box_w)
+        safe_addstr(stdscr, box_y + row, box_x, " " * box_w)
     _wizard_draw_box(stdscr, box_h, box_w, box_y, box_x)
 
     safe_addstr(stdscr, box_y + 1, box_x + 2, "Checking API...", curses.A_BOLD)
@@ -232,13 +232,14 @@ def _wizard_validate_step(stdscr, width, height, item, api_key, scraper, prices_
     # Run validation (use cached prices for speed, fall back to fresh API call)
     found, result, prices_data = validate_item(item, api_key=api_key, scraper=scraper,
                                                 prices_data=prices_cache)
+    curses.flushinp()  # Discard any keystrokes typed during the blocking API call
 
     current_item = dict(item)  # mutable copy
 
     while True:
         # Clear and redraw
         for row in range(box_h):
-            safe_addstr(stdscr, box_y + r, box_x, " " * box_w)
+            safe_addstr(stdscr, box_y + row, box_x, " " * box_w)
         _wizard_draw_box(stdscr, box_h, box_w, box_y, box_x)
 
         y = box_y + 1
@@ -351,7 +352,7 @@ def run_add_wizard(stdscr, scraper, api_key, prices_cache):
         box_x = (width - box_w) // 2
 
         for row in range(box_h):
-            safe_addstr(stdscr, box_y + r, box_x, " " * box_w)
+            safe_addstr(stdscr, box_y + row, box_x, " " * box_w)
         _wizard_draw_box(stdscr, box_h, box_w, box_y, box_x)
         safe_addstr(stdscr, box_y + 1, box_x + 2, f"Weapon: {weapon}", curses.A_BOLD)
         skin = curses_input_blocking(stdscr, box_y + 2, box_x + 2, box_w - 12,
@@ -366,7 +367,7 @@ def run_add_wizard(stdscr, scraper, api_key, prices_cache):
         # STEP 2: Wear
         # ══════════════════════════════════════════════════════
         for row in range(box_h):
-            safe_addstr(stdscr, box_y + r, box_x, " " * box_w)
+            safe_addstr(stdscr, box_y + row, box_x, " " * box_w)
         _wizard_draw_box(stdscr, box_h, box_w, box_y, box_x)
         safe_addstr(stdscr, box_y + 1, box_x + 2, f"Item: {weapon} | {skin}", curses.A_BOLD)
         wear_raw = curses_input_blocking(stdscr, box_y + 2, box_x + 2, box_w - 12,
@@ -377,7 +378,7 @@ def run_add_wizard(stdscr, scraper, api_key, prices_cache):
         # STEP 3: StatTrak
         # ══════════════════════════════════════════════════════
         for row in range(box_h):
-            safe_addstr(stdscr, box_y + r, box_x, " " * box_w)
+            safe_addstr(stdscr, box_y + row, box_x, " " * box_w)
         _wizard_draw_box(stdscr, box_h, box_w, box_y, box_x)
         safe_addstr(stdscr, box_y + 1, box_x + 2,
                     f"Item: {fmt_item_line({'name': f'{weapon} | {skin}', 'wear': wear, 'stattrak': False})}",
@@ -407,7 +408,7 @@ def run_add_wizard(stdscr, scraper, api_key, prices_cache):
             if result_item == "RETRY":
                 # Retry — re-enter skin name
                 for row in range(min(8, height - 2)):
-                    safe_addstr(stdscr, box_y + r, box_x, " " * box_w)
+                    safe_addstr(stdscr, box_y + row, box_x, " " * box_w)
                 _wizard_draw_box(stdscr, 5, box_w, box_y, box_x)
                 safe_addstr(stdscr, box_y + 1, box_x + 2,
                             f"Weapon: {weapon}", curses.A_BOLD)

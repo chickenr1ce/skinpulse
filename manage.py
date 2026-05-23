@@ -16,6 +16,25 @@ def _safe_input(prompt=''):
         return ''
 
 
+def _drain_stdin():
+    """Discard any buffered stdin keystrokes to prevent stale input polluting the next prompt.
+
+    Typing during a blocking operation (e.g., API call) leaves keystrokes in
+    the kernel buffer. This function flushes them so the next input() waits
+    for fresh input. Best-effort — silently no-ops on non-POSIX platforms
+    or when stdin is not a TTY.
+    """
+    import sys
+    try:
+        import termios
+    except ImportError:
+        return  # Non-POSIX platform (e.g. Windows)
+    try:
+        termios.tcflush(sys.stdin.fileno(), termios.TCIFLUSH)
+    except Exception:
+        pass  # stdin has no fileno, not a terminal, or termios error — best-effort
+
+
 def get_all_items():
     """Return all tracked items from items.txt (the single source of truth)."""
     items = load_items()
@@ -133,7 +152,9 @@ def cmd_add():
     # Step 5: API validation
     config_data = load_config()
     api_key = config_data.get('api_key')
+    print("  Checking API...")
     found, result, prices_data = validate_item(item, api_key=api_key)
+    _drain_stdin()  # Discard any keystrokes typed during the API wait
 
     if found is None:
         # API error or no key — warn but let user proceed
@@ -173,6 +194,7 @@ def cmd_add():
                 line = format_item_line(item)
                 print(f"\nPreview: {line}")
                 found, result, prices_data = validate_item(item, api_key=api_key)
+                _drain_stdin()  # Discard stray keystrokes typed during the API wait
                 if found is None:
                     print(f"  {result}")
                     break
