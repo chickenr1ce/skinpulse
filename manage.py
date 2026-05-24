@@ -1,14 +1,11 @@
 #!/usr/bin/env python3
 import sys
-import json
-import re
 from items import (
     load_items, save_items, format_item_line,
     WEAPONS, find_weapon, split_name, _capitalize_skin, normalize_wear,
 )
 from price_empire_scraper import PriceEmpireScraper, format_market_hash_name
-
-CONFIG_FILE = 'config.json'
+from utils import validate_item, load_config, apply_suggestion
 
 
 def _safe_input(prompt=''):
@@ -19,66 +16,36 @@ def _safe_input(prompt=''):
         return ''
 
 
-def _skin_similarity(a, b):
-    """Return True if two skin names are likely the same item.
+def _drain_stdin():
+    """Discard any buffered stdin keystrokes to prevent stale input polluting the next prompt.
 
-    Compares normalized strings (lowercase, no spaces/punctuation).
-    Returns True if one is a substring of the other or they share
-    >80% of characters in common.
+    Typing during a blocking operation (e.g., API call) leaves keystrokes in
+    the kernel buffer. This function flushes them so the next input() waits
+    for fresh input. Best-effort — silently no-ops on non-POSIX platforms
+    or when stdin is not a TTY.
     """
-    def norm(s):
-        return re.sub(r'[\s\'\-]+', '', s).lower()
-
-    na, nb = norm(a), norm(b)
-    if not na or not nb:
-        return False
-    if na == nb:
-        return True
-    if na in nb or nb in na:
-        return True
-    # Character overlap ratio
-    common = sum(1 for c in na if c in nb)
-    return common / max(len(na), len(nb)) > 0.8
-
-
-def load_config():
+    import sys
     try:
-        with open(CONFIG_FILE, 'r') as f:
-            return json.load(f)
-    except FileNotFoundError:
-        return {}
-
-
-def save_config(config):
-    with open(CONFIG_FILE, 'w') as f:
-        json.dump(config, f, indent=4)
-
-
-def sync_config(items):
-    config = load_config()
-    config['items'] = items
-    save_config(config)
+        import termios
+    except ImportError:
+        return  # Non-POSIX platform (e.g. Windows)
+    try:
+        termios.tcflush(sys.stdin.fileno(), termios.TCIFLUSH)
+    except Exception:
+        pass  # stdin has no fileno, not a terminal, or termios error — best-effort
 
 
 def get_all_items():
+    """Return all tracked items from items.txt (the single source of truth)."""
     items = load_items()
-    if items is not None:
-        return items
-    config = load_config()
-    if isinstance(config, list):
-        return config
-    return config.get('items', [])
+    return items if items is not None else []
 
 
 def cmd_list():
     items = get_all_items()
     if not items:
-        items_missing = load_items() is None
-        if items_missing:
-            print("No items.txt found and config.json has no items.")
-        else:
-            print("No items tracked.")
-        print("Run 'python3 manage.py add' to add one.")
+        print("No items tracked.")
+        print("Run 'python3 manage.py add' to add one, or create items.txt.")
         return
     for i, item in enumerate(items):
         print(f"{i}: {format_item_line(item)}")
@@ -138,66 +105,7 @@ def _select_weapon():
         print(f"\n  {len(matches)} matches. Pick a number or refine your search.\n")
 
 
-def _validate_item(item):
-    """Check if the item exists in the PriceEmpire API.
 
-    Returns:
-        - (True, price_info, prices) if found — price_info is a dict with buff163/skins prices,
-          prices is the full API response dict.
-        - (False, available_names, prices) if not found — available_names is a list of similar
-          names that share the same base weapon/skin (for suggestions), prices is the full response.
-        - (None, error_msg, None) if the API call failed.
-    """
-    config = load_config()
-    api_key = config.get('api_key')
-    if not api_key:
-        return (None, "No api_key in config.json — skipping API validation.", None)
-
-    scraper = PriceEmpireScraper(api_key)
-    market_name = format_market_hash_name(item)
-
-    print(f"\n  Checking API for: {market_name}")
-    prices = scraper.get_prices()
-
-    if isinstance(prices, dict) and 'error' in prices:
-        return (None, f"API error: {prices['error']}", None)
-
-    if not isinstance(prices, dict):
-        return (None, f"Unexpected API response: {type(prices).__name__}", None)
-
-    if market_name in prices:
-        # Found — extract price info
-        item_data = prices[market_name]
-        price_info = {}
-        for source in ('buff163', 'skins'):
-            src_data = item_data.get('prices', {}).get(source, {})
-            if isinstance(src_data, dict) and src_data.get('price') is not None:
-                price_info[source] = src_data['price']
-        return (True, price_info, prices)
-
-    # Not found — try to find similar items for suggestions.
-    # Extract weapon and skin from the item name, then find API items
-    # with the same weapon and a similar skin name.
-    similar = []
-    item_name = item.get('name', '')  # e.g. "Glock-18 | Rameses Reachh"
-    weapon_part = item_name.split(' | ')[0].lower() if ' | ' in item_name else ''
-    skin_part = item_name.split(' | ')[1].lower() if ' | ' in item_name else ''
-
-    for api_name in prices:
-        # Check if same weapon
-        if weapon_part and weapon_part not in api_name.lower():
-            continue
-        # Extract skin from API name, stripping wear suffix like "(Factory New)"
-        if ' | ' in api_name:
-            api_skin_full = api_name.split(' | ')[1].lower()
-            # Remove trailing wear in parentheses, e.g. "blue phosphor (factory new)" -> "blue phosphor"
-            api_skin = re.sub(r'\s*\(.*?\)\s*$', '', api_skin_full).strip()
-            if _skin_similarity(skin_part, api_skin):
-                similar.append(api_name)
-                if len(similar) >= 5:
-                    break
-
-    return (False, similar, prices)
 
 
 def cmd_add():
@@ -234,15 +142,19 @@ def cmd_add():
         wear = normalize_wear(wear)
 
     # Step 4: StatTrak
-    st_input = _safe_input("StatTrak? (y/N): ").strip().lower()
-    stattrak = st_input.startswith('y')
+    response = _safe_input("StatTrak? (y/N): ").strip().lower()
+    stattrak = response.startswith('y')
 
     item = {"name": name, "wear": wear, "stattrak": stattrak}
     line = format_item_line(item)
     print(f"\nPreview: {line}")
 
     # Step 5: API validation
-    found, result, prices_data = _validate_item(item)
+    config_data = load_config()
+    api_key = config_data.get('api_key')
+    print("  Checking API...")
+    found, result, prices_data = validate_item(item, api_key=api_key)
+    _drain_stdin()  # Discard any keystrokes typed during the API wait
 
     if found is None:
         # API error or no key — warn but let user proceed
@@ -281,7 +193,8 @@ def cmd_add():
                 item = {"name": name, "wear": wear, "stattrak": stattrak}
                 line = format_item_line(item)
                 print(f"\nPreview: {line}")
-                found, result, prices_data = _validate_item(item)
+                found, result, prices_data = validate_item(item, api_key=api_key)
+                _drain_stdin()  # Discard stray keystrokes typed during the API wait
                 if found is None:
                     print(f"  {result}")
                     break
@@ -300,25 +213,7 @@ def cmd_add():
             try:
                 idx = int(choice) - 1
                 if 0 <= idx < len(similar):
-                    api_name = similar[idx]
-                    # Parse name and wear from API market hash name
-                    m = re.match(r'^(.+?)\s*\(([^)]+)\)\s*$', api_name)
-                    if m:
-                        name = m.group(1).strip()
-                        selected_wear = m.group(2).strip()
-                    else:
-                        name = api_name
-                        selected_wear = None
-                    item = {"name": name, "wear": selected_wear, "stattrak": stattrak}
-                    line = format_item_line(item)
-                    # Look up prices from cached API data
-                    item_data = prices_data.get(api_name, {})
-                    price_info = {}
-                    for source in ('buff163', 'skins'):
-                        src_data = item_data.get('prices', {}).get(source, {})
-                        if isinstance(src_data, dict) and src_data.get('price') is not None:
-                            price_info[source] = src_data['price']
-                    result = price_info
+                    item, result = apply_suggestion(similar, idx, prices_data, stattrak)
                     found = True
                     break
             except (ValueError, IndexError):
@@ -345,7 +240,6 @@ def cmd_add():
     items = get_all_items()
     items.append(item)
     save_items(items)
-    sync_config(items)
     print(f"Added: {line}")
 
 
@@ -367,7 +261,6 @@ def cmd_remove(args):
         if 0 <= idx < len(items):
             item = items.pop(idx)
             save_items(items)
-            sync_config(items)
             print(f"Removed: {format_item_line(item)}")
             return
         else:
@@ -400,7 +293,6 @@ def cmd_remove(args):
 
     items.pop(idx)
     save_items(items)
-    sync_config(items)
     print(f"Removed: {format_item_line(item)}")
 
 

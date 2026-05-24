@@ -1,6 +1,6 @@
-# CS2 Skin Price Scraper (PriceEmpire Edition)
+# Skinpulse
 
-A terminal-based tool to track real-time CS2 skin prices across multiple marketplaces using the PriceEmpire API.
+A terminal-based tool to track real-time skin prices across multiple marketplaces using the PriceEmpire API.
 
 ## Prerequisites
 
@@ -80,8 +80,6 @@ Example `config.json`:
 }
 ```
 
-> **Note:** The `items` array in `config.json` is a legacy fallback. Use `items.txt` or `manage.py add` to manage your watchlist instead.
-
 ## How to Run
 
 1.  **Start the TUI**:
@@ -93,14 +91,14 @@ Example `config.json`:
     **Tip:** add a shell alias to launch from anywhere:
     ```bash
     # For bash/zsh — add to ~/.bashrc or ~/.zshrc
-    alias cs2prices='cd /path/to/CS2_SkinPrice_Scraper && python3 tui.py'
-    alias cs2prices-manage='cd /path/to/CS2_SkinPrice_Scraper && python3 manage.py'
+    alias skinpulse='cd /path/to/CS2_SkinPrice_Scraper && python3 tui.py'
+    alias skinpulse-manage='cd /path/to/CS2_SkinPrice_Scraper && python3 manage.py'
 
     # For fish — add to ~/.config/fish/config.fish
-    alias cs2prices 'cd /path/to/CS2_SkinPrice_Scraper && python3 tui.py'
-    alias cs2prices-manage 'cd /path/to/CS2_SkinPrice_Scraper && python3 manage.py'
+    alias skinpulse 'cd /path/to/CS2_SkinPrice_Scraper && python3 tui.py'
+    alias skinpulse-manage 'cd /path/to/CS2_SkinPrice_Scraper && python3 manage.py'
     ```
-    Then just type `cs2prices` or `cs2prices-manage add` from anywhere.
+    Then just type `skinpulse` or `skinpulse-manage add` from anywhere.
 
 2.  **Interface Controls**:
     *   **'r'**: Manually refresh prices (the app also auto-refreshes every 5 minutes).
@@ -108,6 +106,9 @@ Example `config.json`:
     *   **'q'**: Quit the application.
     *   **1-4**: Sort watchlist columns (press again to toggle asc/desc).
     *   **1-6**: Sort portfolio columns (press again to toggle asc/desc).
+    *   **Ctrl-D / Ctrl-U**: Scroll half-page down/up.
+    *   **PgDn / PgUp**: Scroll full-page down/up.
+    *   **g / G**: Jump to top / bottom of list.
 
 ## Troubleshooting
 

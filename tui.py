@@ -1,70 +1,18 @@
 import curses
-import json
-import os
 import time
 import requests
-from price_empire_scraper import PriceEmpireScraper, format_market_hash_name
-from items import load_items as load_items_file, get_items_mtime
-
-def load_config():
-    try:
-        with open('config.json', 'r') as f:
-            return json.load(f)
-    except Exception as e:
-        return {"error": str(e)}
-
-def draw_price_col(stdscr, y, x, price):
-    stdscr.addstr(y, x, f"{price:>8.2f}")
-
-
-def get_sort_value(item, prices, sort_column):
-    mhn = format_market_hash_name(item)
-    item_data = prices.get(mhn, {})
-    price_dict = item_data.get('prices', {})
-
-    if sort_column == 0:
-        return mhn.lower()
-    elif sort_column == 1:
-        return price_dict.get('buff163', {}).get('price', 0.0) or 0.0
-    elif sort_column == 2:
-        return price_dict.get('skins', {}).get('price', 0.0) or 0.0
-    elif sort_column == 3:
-        all_prices = [v.get('price', 0.0) for k, v in price_dict.items()
-                      if isinstance(v, dict) and v.get('price', 0.0) > 0]
-        return min(all_prices) if all_prices else 0.0
-    return 0.0
-
-
-def get_live_price(mhn, prices, fallback=0.0):
-    item_data = prices.get(mhn, {})
-    price_dict = item_data.get('prices', {}) if isinstance(item_data, dict) else {}
-    buff = price_dict.get('buff163', {}).get('price', 0.0) or 0.0
-    return buff if buff > 0 else fallback
-
-
-def get_portfolio_sort_value(item, prices, sort_column):
-    mhn = item.get('market_hash_name', '')
-    stats = item.get('stats', {})
-
-    if sort_column == 0:
-        return mhn.lower()
-    elif sort_column == 1:
-        return stats.get('holdings', 0) or 0
-    elif sort_column == 2:
-        return stats.get('avgBuyPrice', 0.0) or 0.0
-    elif sort_column in (3, 4, 5, 6):
-        live = get_live_price(mhn, prices, item.get('currentPrice', 0.0) or 0.0)
-        if sort_column == 3:
-            return live
-        hld = stats.get('holdings', 0) or 0
-        if sort_column == 4:
-            return live * hld
-        avg = stats.get('avgBuyPrice', 0.0) or 0.0
-        if sort_column == 5:
-            return (live - avg) * hld
-        if sort_column == 6:
-            return ((live - avg) / avg * 100) if avg > 0 else 0.0
-    return 0.0
+from price_empire_scraper import PriceEmpireScraper
+from items import (
+    load_items, save_items, get_items_mtime,
+    format_item_line,
+)
+from constants.display import MIN_HEIGHT, MIN_WIDTH
+from utils import load_config
+from wizard import safe_addstr, confirm_dialog, run_add_wizard
+from views import (
+    compute_scroll_indicator, render_watchlist, render_portfolio,
+    get_sort_value, get_portfolio_sort_value, get_live_price,
+)
 
 
 def draw_menu(stdscr):
@@ -80,23 +28,11 @@ def draw_menu(stdscr):
     stdscr.timeout(100)
 
     config_data = load_config()
-    api_key = "YOUR_API_KEY"
-    items_to_track = []
-    portfolio_slug = ""
+    api_key = config_data.get("api_key", "YOUR_API_KEY")
+    portfolio_slug = config_data.get("portfolio_slug", "")
 
-    if isinstance(config_data, dict):
-        api_key = config_data.get("api_key", api_key)
-        portfolio_slug = config_data.get("portfolio_slug", "")
-
-    items_loaded = load_items_file()
     items_mtime = get_items_mtime()
-    if items_loaded is not None:
-        items_to_track = items_loaded
-    else:
-        if isinstance(config_data, dict):
-            items_to_track = config_data.get("items", [])
-        elif isinstance(config_data, list):
-            items_to_track = config_data
+    items_to_track = load_items() or []
 
     scraper = PriceEmpireScraper(api_key)
 
@@ -104,7 +40,7 @@ def draw_menu(stdscr):
     prices = {}
     loading = False
     error_message = ""
-    sort_column = 0
+    sort_column = 1
     sort_ascending = True
 
     portfolio = {}
@@ -113,19 +49,58 @@ def draw_menu(stdscr):
     portfolio_sort_column = 0
     portfolio_sort_ascending = True
 
+    watchlist_scroll = 0
+    portfolio_scroll = 0
+    watchlist_cursor = 0
+    portfolio_cursor = 0
+
+    spinner_frames = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
+    spinner_frame = 0
+
     while k != ord('q'):
         stdscr.clear()
         height, width = stdscr.getmaxyx()
+        banner_height = 6 if height >= 20 else 0
 
-        header = "CS2 Skin Price Scraper (PriceEmpire API)"
-        stdscr.addstr(0, (width - len(header)) // 2, header, curses.A_BOLD | curses.A_UNDERLINE)
+        if height < MIN_HEIGHT or width < MIN_WIDTH:
+            msg = f"Terminal too small — need at least {MIN_WIDTH}x{MIN_HEIGHT}, got {width}x{height}"
+            try:
+                stdscr.addstr(0, 0, msg[:width])
+            except curses.error:
+                pass
+            stdscr.refresh()
+            k = stdscr.getch()
+            continue
+
+        if banner_height:
+            banner_art = [
+                "         __   _                   __        ",
+                "   _____/ /__(_)___  ____  __  __/ /_______ ",
+                "  / ___/ //_/ / __ \\/ __ \\/ / / / / ___/ _ \\",
+                " (__  ) ,< / / / / / /_/ / /_/ / (__  )  __/",
+                "/____/_/|_/_/_/ /_/ .___/\\__,_/_/____/\\___/ ",
+                "                 /_/                        ",
+            ]
+            max_banner_width = max(len(line) for line in banner_art)
+            for i, line in enumerate(banner_art):
+                x = (width - max_banner_width) // 2
+                safe_addstr(stdscr, i, x, line, curses.A_BOLD)
+
+        # ── Scroll indicator ──
+        max_visible = max(1, height - 8 - banner_height)
+        if current_view == "watchlist":
+            scroll_indicator = compute_scroll_indicator(len(items_to_track), watchlist_scroll, max_visible)
+        else:
+            scroll_indicator = compute_scroll_indicator(len(portfolio.get("items", [])), portfolio_scroll, max_visible)
 
         if current_view == "watchlist":
-            help_text = "'q' quit | 'r' refresh | 'p' portfolio view | '1'-'4' sort"
-            stdscr.addstr(height - 1, 0, help_text)
+            help_text = ("'q' quit | 'r' ref | 'p' port | 'a' add | 'd' del | "
+                         "↑↓ nav | '1'-'4' sort | ^D/^U sc | g/G top/bot")
+            safe_addstr(stdscr, height - 1, 0, (help_text + scroll_indicator)[:width])
         else:
-            help_text = "'q' quit | 'r' refresh | 'p' watchlist view | '1'-'7' sort"
-            stdscr.addstr(height - 1, 0, help_text)
+            help_text = ("'q' quit | 'r' ref | 'p' watch | "
+                         "↑↓ nav | '1'-'7' sort | ^D/^U sc | g/G top/bot")
+            safe_addstr(stdscr, height - 1, 0, (help_text + scroll_indicator)[:width])
 
         current_time = time.time()
 
@@ -139,10 +114,12 @@ def draw_menu(stdscr):
 
         if should_refresh:
             loading = True
+            spinner_char = spinner_frames[spinner_frame]
+            load_y = banner_height
             if current_view == "portfolio" and portfolio_slug:
-                stdscr.addstr(2, 2, "Fetching prices and portfolio...")
+                safe_addstr(stdscr, load_y, 2, f"{spinner_char} Fetching prices and portfolio...")
             else:
-                stdscr.addstr(2, 2, "Fetching prices from PriceEmpire...")
+                safe_addstr(stdscr, load_y, 2, f"{spinner_char} Fetching prices from PriceEmpire...")
             stdscr.refresh()
 
             api_response = scraper.get_prices()
@@ -178,188 +155,156 @@ def draw_menu(stdscr):
                 else:
                     sort_column = col
                     sort_ascending = True
+                watchlist_scroll = 0
+                watchlist_cursor = 0
             elif current_view == "portfolio" and col < 7:
                 if col == portfolio_sort_column:
                     portfolio_sort_ascending = not portfolio_sort_ascending
                 else:
                     portfolio_sort_column = col
                     portfolio_sort_ascending = True
+                portfolio_scroll = 0
+                portfolio_cursor = 0
 
+        # ── Cursor navigation ──
+        if k == curses.KEY_UP:
+            if current_view == "watchlist":
+                # sorted_items is defined later during rendering; compute here.
+                # We'll use items_to_track to approximate (sort happens in render).
+                watchlist_cursor = max(0, watchlist_cursor - 1)
+            else:
+                portfolio_cursor = max(0, portfolio_cursor - 1)
+        elif k == curses.KEY_DOWN:
+            if current_view == "watchlist":
+                max_idx = max(0, len(items_to_track) - 1)
+                watchlist_cursor = min(max_idx, watchlist_cursor + 1)
+            else:
+                max_idx = max(0, len(portfolio.get("items", [])) - 1)
+                portfolio_cursor = min(max_idx, portfolio_cursor + 1)
+
+        # ── Delete selected item ──
+        if k == ord('d') and current_view == "watchlist" and items_to_track:
+            # Build sorted list to find what's at cursor
+            sorted_items = sorted(
+                items_to_track,
+                key=lambda i: get_sort_value(i, prices, sort_column),
+                reverse=not sort_ascending,
+            )
+            if 0 <= watchlist_cursor < len(sorted_items):
+                selected = sorted_items[watchlist_cursor]
+                name_str = format_item_line(selected)
+                if confirm_dialog(stdscr, f'Remove "{name_str}"?'):
+                    items_to_track.remove(selected)
+                    save_items(items_to_track)
+                    watchlist_cursor = min(watchlist_cursor, max(0, len(items_to_track) - 1))
+                    should_refresh = True
+
+        # ── Add item wizard ──
+        if k == ord('a') and current_view == "watchlist":
+            new_item = run_add_wizard(stdscr, scraper, api_key, prices)
+            if new_item is not None:
+                items_to_track.append(new_item)
+                save_items(items_to_track)
+                watchlist_cursor = len(items_to_track) - 1
+                watchlist_scroll = 0
+                should_refresh = True
+
+        # ── Scrolling ──
+        if k == curses.KEY_PPAGE:  # PgUp
+            if current_view == "watchlist":
+                watchlist_scroll -= max(1, height - 8 - banner_height)
+            else:
+                portfolio_scroll -= max(1, height - 8 - banner_height)
+        elif k == curses.KEY_NPAGE:  # PgDn
+            if current_view == "watchlist":
+                watchlist_scroll += max(1, height - 8 - banner_height)
+            else:
+                portfolio_scroll += max(1, height - 8 - banner_height)
+        elif k == 21:  # Ctrl-U (half page up)
+            if current_view == "watchlist":
+                watchlist_scroll -= max(1, (height - 8 - banner_height) // 2)
+            else:
+                portfolio_scroll -= max(1, (height - 8 - banner_height) // 2)
+        elif k == 4:  # Ctrl-D (half page down)
+            if current_view == "watchlist":
+                watchlist_scroll += max(1, (height - 8 - banner_height) // 2)
+            else:
+                portfolio_scroll += max(1, (height - 8 - banner_height) // 2)
+        elif k == ord('g'):
+            if current_view == "watchlist":
+                watchlist_scroll = 0
+                watchlist_cursor = 0
+            else:
+                portfolio_scroll = 0
+                portfolio_cursor = 0
+        elif k == ord('G'):
+            if current_view == "watchlist":
+                watchlist_scroll = 10**9
+                watchlist_cursor = max(0, len(items_to_track) - 1)
+            else:
+                portfolio_scroll = 10**9
+                portfolio_cursor = max(0, len(portfolio.get("items", [])) - 1)
+
+        # ── Auto-scroll cursor into view ──
+        max_visible = max(1, height - 8 - banner_height)
+        if current_view == "watchlist":
+            if watchlist_cursor < watchlist_scroll:
+                watchlist_scroll = watchlist_cursor
+            elif watchlist_cursor >= watchlist_scroll + max_visible and len(items_to_track) > 0:
+                watchlist_scroll = watchlist_cursor - max_visible + 1
+        else:
+            portfolio_len = len(portfolio.get("items", []))
+            if portfolio_cursor < portfolio_scroll:
+                portfolio_scroll = portfolio_cursor
+            elif portfolio_cursor >= portfolio_scroll + max_visible and portfolio_len > 0:
+                portfolio_scroll = portfolio_cursor - max_visible + 1
+
+        # ── External file change detection ──
         new_mtime = get_items_mtime()
         if new_mtime and new_mtime != items_mtime:
-            loaded = load_items_file()
+            loaded = load_items()
             if loaded is not None:
                 items_to_track = loaded
                 items_mtime = new_mtime
+                watchlist_scroll = 0
+                watchlist_cursor = 0
 
         # ── WATCHLIST VIEW ──
         if current_view == "watchlist":
-            if error_message:
-                stdscr.addstr(2, 2, f"Error: {error_message[:width-10]}", curses.A_BOLD)
-
-            y = 4
-            col_headers = ["Item Name", "Buff 163", "Skins.com", "Lowest"]
-            arrows = ["", "", "", ""]
-            if sort_column < len(col_headers):
-                arrows[sort_column] = " ▲" if sort_ascending else " ▼"
-
-            price_width = 9
-            name_width = max(20, width - (price_width * 3 + 3 * 3 + 2 + 2))
-
-            header_fmt = f"{{:<{name_width}}} | {{:>{price_width}}} | {{:>{price_width}}} | {{:>{price_width}}}"
-            header_str = header_fmt.format(
-                col_headers[0] + arrows[0],
-                col_headers[1] + arrows[1],
-                col_headers[2] + arrows[2],
-                col_headers[3] + arrows[3],
-            )
-            stdscr.addstr(y, 2, header_str, curses.A_REVERSE)
-            y += 1
-
-            sorted_items = sorted(items_to_track, key=lambda i: get_sort_value(i, prices, sort_column),
-                                  reverse=not sort_ascending)
-
-            sep_width = name_width + 3 + price_width + 3 + price_width + 3 + price_width
-
-            for item in sorted_items:
-                if y >= height - 3:
-                    break
-
-                mhn = format_market_hash_name(item)
-                item_data = prices.get(mhn, {})
-                price_dict = item_data.get('prices', {})
-
-                buff_price = price_dict.get('buff163', {}).get('price', 0.0) or 0.0
-                skins_price = price_dict.get('skins', {}).get('price', 0.0) or 0.0
-                all_provider_prices = [v.get('price', 0.0) for k, v in price_dict.items()
-                                       if isinstance(v, dict) and v.get('price', 0.0) > 0]
-                min_price = min(all_provider_prices) if all_provider_prices else 0.0
-
-                x = 2
-                stdscr.addstr(y, x, f"{mhn[:name_width]:<{name_width}}")
-                x += name_width + 3
-
-                draw_price_col(stdscr, y, x, buff_price)
-                x += price_width + 3
-
-                draw_price_col(stdscr, y, x, skins_price)
-                x += price_width + 3
-
-                draw_price_col(stdscr, y, x, min_price)
-
-                y += 1
-
-                if y < height - 3:
-                    stdscr.addstr(y, 2, "─" * sep_width)
-                    y += 1
+            render_watchlist(stdscr, 0, width, items_to_track, prices,
+                            sort_column, sort_ascending, watchlist_scroll,
+                            watchlist_cursor, max_visible, banner_height,
+                            error_message)
 
         # ── PORTFOLIO VIEW ──
         else:
-            if portfolio_error:
-                stdscr.addstr(2, 2, f"Portfolio error: {portfolio_error[:width - 20]}", curses.A_BOLD)
+            render_portfolio(stdscr, 0, width, portfolio, portfolio_slug,
+                            prices, portfolio_sort_column,
+                            portfolio_sort_ascending, portfolio_scroll,
+                            portfolio_cursor, max_visible, banner_height,
+                            portfolio_error)
 
-            if not portfolio:
-                stdscr.addstr(2, 2, "No portfolio data loaded. Press 'r' to refresh.")
-            else:
-                p_info = portfolio.get("portfolio", {})
-                p_name = p_info.get("name", portfolio_slug)[:18]
-                p_stats = portfolio.get("stats", {})
-                tv = p_stats.get("totalValue", 0)
-                tp = p_stats.get("totalProfit", 0)
-                troi = p_stats.get("totalROI", 0)
-                chg = p_stats.get("change24h", 0)
-                chg_pct = p_stats.get("change24hPercentage", 0)
+        # ── Refresh status (top right) ──
+        if loading:
+            spinner_char = spinner_frames[spinner_frame]
+            status_text = f"{spinner_char} Refreshing..."
+        elif last_update > 0:
+            elapsed = current_time - last_update
+            remaining = max(0, 300 - elapsed)
+            mins = int(remaining // 60)
+            secs = int(remaining % 60)
+            bar_width = 12
+            filled = min(bar_width, int((elapsed / 300) * bar_width))
+            bar = "█" * filled + "░" * (bar_width - filled)
+            status_text = f"Next {mins}:{secs:02d} [{bar}]"
+        else:
+            status_text = "No data loaded."
 
-                summary = f"Portfolio: {p_name} | Val: €{tv:,.2f} | P&L: €{tp:+.2f} ({troi:+.2f}%) | 24h: €{chg:+.2f} ({chg_pct:+.2f}%)"
-                stdscr.addstr(2, 2, summary[:width - 4])
-
-                y = 4
-                p_cols = ["Item Name", "Qty", "Buy", "Now", "Total", "P&L", "ROI"]
-                parrows = ["", "", "", "", "", "", ""]
-                if portfolio_sort_column < len(p_cols):
-                    parrows[portfolio_sort_column] = " ▲" if portfolio_sort_ascending else " ▼"
-
-                p_name_width = max(15, width - (3 + 8 + 9 + 10 + 9 + 6 + 3 * 6 + 2 + 2))
-                p_fmt = f"{{:<{p_name_width}}} | {{:>3}} | {{:>8}} | {{:>9}} | {{:>10}} | {{:>9}} | {{:>6}}"
-                p_header_str = p_fmt.format(
-                    p_cols[0] + parrows[0],
-                    p_cols[1] + parrows[1],
-                    p_cols[2] + parrows[2],
-                    p_cols[3] + parrows[3],
-                    p_cols[4] + parrows[4],
-                    p_cols[5] + parrows[5],
-                    p_cols[6] + parrows[6],
-                )
-                stdscr.addstr(y, 2, p_header_str, curses.A_REVERSE)
-                y += 1
-
-                p_items = portfolio.get("items", [])
-                sorted_p = sorted(p_items, key=lambda i: get_portfolio_sort_value(i, prices, portfolio_sort_column),
-                                  reverse=not portfolio_sort_ascending)
-
-                p_sep_width = p_name_width + 3 + 3 + 3 + 8 + 3 + 9 + 3 + 10 + 3 + 9 + 3 + 6
-
-                for item in sorted_p:
-                    if y >= height - 3:
-                        break
-
-                    mhn = item.get("market_hash_name", "")
-                    p_stats = item.get("stats", {})
-                    holdings = p_stats.get("holdings", 0) or 0
-                    avg_buy = p_stats.get("avgBuyPrice", 0.0) or 0.0
-
-                    live_price = get_live_price(mhn, prices, item.get("currentPrice", 0.0) or 0.0)
-
-                    pl = (live_price - avg_buy) * holdings
-                    roi_pct = ((live_price - avg_buy) / avg_buy * 100) if avg_buy > 0 else 0
-
-                    x = 2
-                    stdscr.addstr(y, x, f"{mhn[:p_name_width]:<{p_name_width}}")
-                    x += p_name_width + 3
-
-                    stdscr.addstr(y, x, f"{holdings:>3}")
-                    x += 3 + 3
-
-                    stdscr.addstr(y, x, f"{avg_buy:>8.2f}")
-                    x += 8 + 3
-
-                    draw_price_col(stdscr, y, x, live_price)
-                    x += 9 + 3
-
-                    total_val = live_price * holdings
-                    stdscr.addstr(y, x, f"{total_val:>10.2f}")
-                    x += 10 + 3
-
-                    if pl > 0.01:
-                        pl_color = curses.color_pair(1)
-                    elif pl < -0.01:
-                        pl_color = curses.color_pair(2)
-                    else:
-                        pl_color = curses.A_NORMAL
-                    stdscr.addstr(y, x, f"{pl:>+9.2f}", pl_color)
-                    x += 9 + 3
-
-                    if roi_pct > 0.01:
-                        roi_color = curses.color_pair(1)
-                    elif roi_pct < -0.01:
-                        roi_color = curses.color_pair(2)
-                    else:
-                        roi_color = curses.A_NORMAL
-                    stdscr.addstr(y, x, f"{roi_pct:>+5.1f}%", roi_color)
-
-                    y += 1
-
-                    if y < height - 3:
-                        stdscr.addstr(y, 2, "─" * p_sep_width)
-                        y += 1
+        status_x = max(0, width - len(status_text) - 2)
+        safe_addstr(stdscr, 0, status_x, status_text)
 
         if loading:
-            stdscr.addstr(height - 2, 2, "Refreshing...")
-        elif last_update > 0:
-            time_since = int(current_time - last_update)
-            stdscr.addstr(height - 2, 2, f"Last update: {time_since}s ago")
-        else:
-            stdscr.addstr(height - 2, 2, "No data loaded.")
+            spinner_frame = (spinner_frame + 1) % len(spinner_frames)
 
         stdscr.refresh()
         k = stdscr.getch()

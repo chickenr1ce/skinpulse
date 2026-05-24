@@ -1,4 +1,4 @@
-# CS2 SkinPrice Scraper — Roadmap
+# Skinpulse — Roadmap
 
 ## Completed
 
@@ -32,9 +32,8 @@
 - [ ] Best/worst day insight — show weekly patterns (best day, weekend vs weekday delta) from portfolio stats
 
 ### Quality of Life
-- [ ] Price alerts — config-based thresholds per item, visual highlight or terminal bell on trigger (also sync with `/alerts` API)
-- [ ] CSV export — dump current prices or portfolio to timestamped CSV (use `/portfolios/{slug}/export` for full data)
-- [ ] Scrolling — arrow keys / jk when items exceed terminal height
+- [ ] Item selection — arrow keys / jk to highlight items (future: quick-remove, per-item settings via selected item). Selection is separate from scrolling — use modifier keys for scrolling to avoid conflicts.
+- [ ] Scrolling — Ctrl-D/Ctrl-U (half-page), PgDn/PgUp (full-page), g/G (top/bottom) when items exceed terminal height. Arrow keys / jk are reserved for item selection.
 - [ ] Profitable items filter — filter portfolio view to show only items in profit/loss
 - [ ] Configurable refresh interval — +/- keys to adjust 300s default
 - [ ] Profit spread column — show buff163 vs skins.com margin per item
