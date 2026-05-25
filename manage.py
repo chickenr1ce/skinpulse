@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 import sys
 from items import (
-    load_items, save_items, format_item_line,
+    load_items, save_items, format_item_line, format_market_hash_name,
     WEAPONS, find_weapon, split_name, _capitalize_skin, normalize_wear,
 )
-from price_empire_scraper import PriceEmpireScraper, format_market_hash_name
+from price_empire_scraper import PriceEmpireScraper
 from utils import validate_item, load_config, apply_suggestion
 
 

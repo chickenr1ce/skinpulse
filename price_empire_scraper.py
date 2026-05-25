@@ -1,7 +1,7 @@
 import requests
 import json
 import time
-from constants.weapons import KNIFE_NAMES
+
 
 class PriceEmpireScraper:
     def __init__(self, api_key):
@@ -98,27 +98,4 @@ class PriceEmpireScraper:
                         if key in item_stats and isinstance(item_stats[key], (int, float)):
                             item_stats[key] = item_stats[key] / 100
 
-def format_market_hash_name(item):
-    name = item.get('name')
-    wear = item.get('wear')
-    stattrak = item.get('stattrak', False)
-    
-    # Format: "StatTrak™ " (if true) + name + " (" + wear + ")"
-    # Example: "★ Karambit | Black Laminate (Well-Worn)"
-    # Note: PriceEmpire uses exact Steam Market Hash Names.
-    
-    # Prepend ★ for knives. Use exact weapon-part lookup (not substring — "Bayonet" and
-    # "Shadow Daggers" don't contain "Knife", and the full name is "Weapon | Skin").
-    full_name = name
-    weapon_part = name.split(' | ')[0] if ' | ' in name else name
-    if weapon_part in KNIFE_NAMES and not name.startswith("★"):
-        full_name = "★ " + name
-        
-    if stattrak:
-        full_name = "StatTrak™ " + full_name
-        
-    if wear:
-        full_name = f"{full_name} ({wear})"
-        
-    return full_name
 

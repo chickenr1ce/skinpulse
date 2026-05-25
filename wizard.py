@@ -8,9 +8,8 @@ are used by the main TUI loop as well.
 import curses
 from items import (
     find_weapon, WEAPONS, _capitalize_skin, normalize_wear,
-    format_item_line as fmt_item_line,
+    format_item_line as fmt_item_line, format_market_hash_name,
 )
-from price_empire_scraper import format_market_hash_name
 from utils import validate_item, parse_suggestion_api_name, apply_suggestion
 
 

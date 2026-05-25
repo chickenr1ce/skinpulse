@@ -5,7 +5,7 @@ to keep the main loop focused on orchestration.
 """
 
 import curses
-from price_empire_scraper import format_market_hash_name
+from items import format_market_hash_name
 from wizard import safe_addstr
 
 

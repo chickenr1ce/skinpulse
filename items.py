@@ -1,7 +1,7 @@
 import os
 import re
 
-from constants.weapons import WEAPONS
+from constants.weapons import KNIFE_NAMES, WEAPONS
 from constants.wear import WEAR_MAP
 
 ITEMS_FILE = 'items.txt'
@@ -206,3 +206,29 @@ def get_items_mtime(path=ITEMS_FILE):
         return os.path.getmtime(path)
     except FileNotFoundError:
         return 0
+
+
+def format_market_hash_name(item):
+    """Turn an item dict into a Steam Market Hash Name.
+
+    Handles StatTrak prefix, ★ prefix for knives, and wear suffix.
+    Example: 'StatTrak™ ★ Karambit | Black Laminate (Well-Worn)'
+    """
+    name = item.get('name')
+    wear = item.get('wear')
+    stattrak = item.get('stattrak', False)
+
+    # Prepend ★ for knives. Use exact weapon-part lookup (not substring — "Bayonet" and
+    # "Shadow Daggers" don't contain "Knife", and the full name is "Weapon | Skin").
+    full_name = name
+    weapon_part = name.split(' | ')[0] if ' | ' in name else name
+    if weapon_part in KNIFE_NAMES and not name.startswith("★"):
+        full_name = "★ " + name
+
+    if stattrak:
+        full_name = "StatTrak™ " + full_name
+
+    if wear:
+        full_name = f"{full_name} ({wear})"
+
+    return full_name

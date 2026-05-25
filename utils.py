@@ -6,7 +6,8 @@ Extracted from manage.py so both manage.py and tui.py can use them.
 import json
 import re
 
-from price_empire_scraper import PriceEmpireScraper, format_market_hash_name
+from items import format_market_hash_name
+from price_empire_scraper import PriceEmpireScraper
 
 CONFIG_FILE = 'config.json'
 
