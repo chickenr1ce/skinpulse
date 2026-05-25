@@ -1,4 +1,5 @@
 import curses
+import threading
 import time
 import requests
 from price_empire_scraper import PriceEmpireScraper
@@ -57,6 +58,12 @@ def draw_menu(stdscr):
     spinner_frames = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
     spinner_frame = 0
 
+    # Async fetch state
+    price_thread = None
+    price_data = None
+    portfolio_thread = None
+    portfolio_data = None
+
     while k != ord('q'):
         stdscr.clear()
         height, width = stdscr.getmaxyx()
@@ -112,8 +119,10 @@ def draw_menu(stdscr):
         elif current_time - last_update > 300:
             should_refresh = True
 
-        if should_refresh:
+        if should_refresh and not loading:
             loading = True
+
+            # Instant visual feedback (first frame; thread updates will animate)
             spinner_char = spinner_frames[spinner_frame]
             load_y = banner_height
             if current_view == "portfolio" and portfolio_slug:
@@ -122,24 +131,22 @@ def draw_menu(stdscr):
                 safe_addstr(stdscr, load_y, 2, f"{spinner_char} Fetching prices from PriceEmpire...")
             stdscr.refresh()
 
-            api_response = scraper.get_prices()
+            # Start async price fetch
+            price_data = None
+            def _fetch_prices():
+                nonlocal price_data
+                price_data = scraper.get_prices()
+            price_thread = threading.Thread(target=_fetch_prices, daemon=True)
+            price_thread.start()
 
+            # Start async portfolio fetch if needed
             if portfolio_slug:
-                portfolio_response = scraper.get_portfolio(portfolio_slug)
-                if isinstance(portfolio_response, dict) and "error" in portfolio_response:
-                    portfolio_error = portfolio_response["error"]
-                elif isinstance(portfolio_response, dict):
-                    portfolio = portfolio_response
-                    portfolio_error = ""
-
-            last_update = current_time
-
-            if isinstance(api_response, dict) and "error" in api_response:
-                error_message = api_response["error"]
-            else:
-                prices = api_response
-                error_message = ""
-            loading = False
+                portfolio_data = None
+                def _fetch_portfolio():
+                    nonlocal portfolio_data
+                    portfolio_data = scraper.get_portfolio(portfolio_slug)
+                portfolio_thread = threading.Thread(target=_fetch_portfolio, daemon=True)
+                portfolio_thread.start()
 
         if k == ord('p'):
             if portfolio_slug:
@@ -269,20 +276,59 @@ def draw_menu(stdscr):
                 watchlist_scroll = 0
                 watchlist_cursor = 0
 
+        # ── Async fetch completion check ──
+        if loading:
+            # Price fetch done?
+            if price_thread and not price_thread.is_alive() and price_data is not None:
+                api_response = price_data
+                price_data = None
+                price_thread = None
+                last_update = time.time()
+                if isinstance(api_response, dict) and "error" in api_response:
+                    error_message = api_response["error"]
+                else:
+                    prices = api_response
+                    error_message = ""
+
+            # Portfolio fetch done?
+            if portfolio_slug and portfolio_thread and not portfolio_thread.is_alive() and portfolio_data is not None:
+                portfolio_response = portfolio_data
+                portfolio_data = None
+                portfolio_thread = None
+                if isinstance(portfolio_response, dict) and "error" in portfolio_response:
+                    portfolio_error = portfolio_response["error"]
+                elif isinstance(portfolio_response, dict):
+                    portfolio = portfolio_response
+                    portfolio_error = ""
+
+            # Both fetches complete → clear loading state
+            if (price_thread is None) and (not portfolio_slug or portfolio_thread is None):
+                loading = False
+
         # ── WATCHLIST VIEW ──
         if current_view == "watchlist":
-            render_watchlist(stdscr, 0, width, items_to_track, prices,
-                            sort_column, sort_ascending, watchlist_scroll,
-                            watchlist_cursor, max_visible, banner_height,
-                            error_message)
+            if loading:
+                y = 6 if banner_height else 0
+                msg = f"{spinner_frames[spinner_frame]} Fetching prices from PriceEmpire..."
+                safe_addstr(stdscr, y, 2, msg[:width-4])
+            else:
+                render_watchlist(stdscr, 0, width, items_to_track, prices,
+                                sort_column, sort_ascending, watchlist_scroll,
+                                watchlist_cursor, max_visible, banner_height,
+                                error_message)
 
         # ── PORTFOLIO VIEW ──
         else:
-            render_portfolio(stdscr, 0, width, portfolio, portfolio_slug,
-                            prices, portfolio_sort_column,
-                            portfolio_sort_ascending, portfolio_scroll,
-                            portfolio_cursor, max_visible, banner_height,
-                            portfolio_error)
+            if loading:
+                y = 6 if banner_height else 0
+                msg = f"{spinner_frames[spinner_frame]} Fetching prices and portfolio..."
+                safe_addstr(stdscr, y, 2, msg[:width-4])
+            else:
+                render_portfolio(stdscr, 0, width, portfolio, portfolio_slug,
+                                prices, portfolio_sort_column,
+                                portfolio_sort_ascending, portfolio_scroll,
+                                portfolio_cursor, max_visible, banner_height,
+                                portfolio_error)
 
         # ── Refresh status (top right) ──
         if loading:
