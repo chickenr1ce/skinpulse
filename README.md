@@ -92,12 +92,12 @@ Example `config.json`:
     **Tip:** add a shell alias to launch from anywhere:
     ```bash
     # For bash/zsh — add to ~/.bashrc or ~/.zshrc
-    alias skinpulse='cd /path/to/CS2_SkinPrice_Scraper && python3 tui.py'
-    alias skinpulse-manage='cd /path/to/CS2_SkinPrice_Scraper && python3 manage.py'
+    alias skinpulse='cd /path/to/skinpulse && python3 tui.py'
+    alias skinpulse-manage='cd /path/to/skinpulse && python3 manage.py'
 
     # For fish — add to ~/.config/fish/config.fish
-    alias skinpulse 'cd /path/to/CS2_SkinPrice_Scraper && python3 tui.py'
-    alias skinpulse-manage 'cd /path/to/CS2_SkinPrice_Scraper && python3 manage.py'
+    alias skinpulse 'cd /path/to/skinpulse && python3 tui.py'
+    alias skinpulse-manage 'cd /path/to/skinpulse && python3 manage.py'
     ```
     Then just type `skinpulse` or `skinpulse-manage add` from anywhere.
 
