@@ -76,7 +76,8 @@ python3 manage.py remove Redline    # Remove by name substring
 Example `config.json`:
 ```json
 {
-    "api_key": "your-api-key-here"
+    "api_key": "your-api-key-here",
+    "portfolio_slug": "your-portfolio-slug"
 }
 ```
 
@@ -104,8 +105,8 @@ Example `config.json`:
     *   **'r'**: Manually refresh prices (the app also auto-refreshes every 5 minutes).
     *   **'p'**: Toggle between watchlist and portfolio view.
     *   **'q'**: Quit the application.
-    *   **1-4**: Sort watchlist columns (press again to toggle asc/desc).
-    *   **1-6**: Sort portfolio columns (press again to toggle asc/desc).
+    *   **1-7**: Sort watchlist columns (press again to toggle asc/desc).
+    *   **1-7**: Sort portfolio columns (press again to toggle asc/desc).
     *   **Ctrl-D / Ctrl-U**: Scroll half-page down/up.
     *   **PgDn / PgUp**: Scroll full-page down/up.
     *   **g / G**: Jump to top / bottom of list.

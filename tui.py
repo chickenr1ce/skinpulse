@@ -1,4 +1,5 @@
 import curses
+import threading
 import time
 import requests
 from price_empire_scraper import PriceEmpireScraper
@@ -8,11 +9,22 @@ from items import (
 )
 from constants.display import MIN_HEIGHT, MIN_WIDTH
 from utils import load_config
-from wizard import safe_addstr, confirm_dialog, run_add_wizard
+from wizard import run_add_wizard
+from curses_utils import safe_addstr, confirm_dialog
 from views import (
     compute_scroll_indicator, render_watchlist, render_portfolio,
     get_sort_value, get_portfolio_sort_value, get_live_price,
 )
+
+from dataclasses import dataclass, field
+
+
+@dataclass
+class ViewState:
+    scroll: int = 0
+    cursor: int = 0
+    sort_column: int = 0
+    sort_ascending: bool = True
 
 
 def draw_menu(stdscr):
@@ -40,27 +52,29 @@ def draw_menu(stdscr):
     prices = {}
     loading = False
     error_message = ""
-    sort_column = 1
-    sort_ascending = True
+    views = {
+        "watchlist": ViewState(sort_column=1),
+        "portfolio": ViewState(),
+    }
 
     portfolio = {}
     portfolio_error = ""
     current_view = "watchlist"
-    portfolio_sort_column = 0
-    portfolio_sort_ascending = True
-
-    watchlist_scroll = 0
-    portfolio_scroll = 0
-    watchlist_cursor = 0
-    portfolio_cursor = 0
 
     spinner_frames = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
     spinner_frame = 0
+
+    # Async fetch state
+    price_thread = None
+    price_data = None
+    portfolio_thread = None
+    portfolio_data = None
 
     while k != ord('q'):
         stdscr.clear()
         height, width = stdscr.getmaxyx()
         banner_height = 6 if height >= 20 else 0
+        content_rows = max(1, height - 8 - banner_height)
 
         if height < MIN_HEIGHT or width < MIN_WIDTH:
             msg = f"Terminal too small — need at least {MIN_WIDTH}x{MIN_HEIGHT}, got {width}x{height}"
@@ -87,15 +101,15 @@ def draw_menu(stdscr):
                 safe_addstr(stdscr, i, x, line, curses.A_BOLD)
 
         # ── Scroll indicator ──
-        max_visible = max(1, height - 8 - banner_height)
+        max_visible = content_rows
         if current_view == "watchlist":
-            scroll_indicator = compute_scroll_indicator(len(items_to_track), watchlist_scroll, max_visible)
+            scroll_indicator = compute_scroll_indicator(len(items_to_track), views["watchlist"].scroll, max_visible)
         else:
-            scroll_indicator = compute_scroll_indicator(len(portfolio.get("items", [])), portfolio_scroll, max_visible)
+            scroll_indicator = compute_scroll_indicator(len(portfolio.get("items", [])), views["portfolio"].scroll, max_visible)
 
         if current_view == "watchlist":
             help_text = ("'q' quit | 'r' ref | 'p' port | 'a' add | 'd' del | "
-                         "↑↓ nav | '1'-'4' sort | ^D/^U sc | g/G top/bot")
+                         "↑↓ nav | '1'-'7' sort | ^D/^U sc | g/G top/bot")
             safe_addstr(stdscr, height - 1, 0, (help_text + scroll_indicator)[:width])
         else:
             help_text = ("'q' quit | 'r' ref | 'p' watch | "
@@ -112,8 +126,10 @@ def draw_menu(stdscr):
         elif current_time - last_update > 300:
             should_refresh = True
 
-        if should_refresh:
+        if should_refresh and not loading:
             loading = True
+
+            # Instant visual feedback (first frame; thread updates will animate)
             spinner_char = spinner_frames[spinner_frame]
             load_y = banner_height
             if current_view == "portfolio" and portfolio_slug:
@@ -122,24 +138,22 @@ def draw_menu(stdscr):
                 safe_addstr(stdscr, load_y, 2, f"{spinner_char} Fetching prices from PriceEmpire...")
             stdscr.refresh()
 
-            api_response = scraper.get_prices()
+            # Start async price fetch
+            price_data = None
+            def _fetch_prices():
+                nonlocal price_data
+                price_data = scraper.get_prices()
+            price_thread = threading.Thread(target=_fetch_prices, daemon=True)
+            price_thread.start()
 
+            # Start async portfolio fetch if needed
             if portfolio_slug:
-                portfolio_response = scraper.get_portfolio(portfolio_slug)
-                if isinstance(portfolio_response, dict) and "error" in portfolio_response:
-                    portfolio_error = portfolio_response["error"]
-                elif isinstance(portfolio_response, dict):
-                    portfolio = portfolio_response
-                    portfolio_error = ""
-
-            last_update = current_time
-
-            if isinstance(api_response, dict) and "error" in api_response:
-                error_message = api_response["error"]
-            else:
-                prices = api_response
-                error_message = ""
-            loading = False
+                portfolio_data = None
+                def _fetch_portfolio():
+                    nonlocal portfolio_data
+                    portfolio_data = scraper.get_portfolio(portfolio_slug)
+                portfolio_thread = threading.Thread(target=_fetch_portfolio, daemon=True)
+                portfolio_thread.start()
 
         if k == ord('p'):
             if portfolio_slug:
@@ -149,54 +163,38 @@ def draw_menu(stdscr):
 
         if k in (ord('1'), ord('2'), ord('3'), ord('4'), ord('5'), ord('6'), ord('7')):
             col = k - ord('1')
-            if current_view == "watchlist" and col < 4:
-                if col == sort_column:
-                    sort_ascending = not sort_ascending
+            max_cols = 7 if current_view == "watchlist" else 7
+            if col < max_cols:
+                vs = views[current_view]
+                if col == vs.sort_column:
+                    vs.sort_ascending = not vs.sort_ascending
                 else:
-                    sort_column = col
-                    sort_ascending = True
-                watchlist_scroll = 0
-                watchlist_cursor = 0
-            elif current_view == "portfolio" and col < 7:
-                if col == portfolio_sort_column:
-                    portfolio_sort_ascending = not portfolio_sort_ascending
-                else:
-                    portfolio_sort_column = col
-                    portfolio_sort_ascending = True
-                portfolio_scroll = 0
-                portfolio_cursor = 0
+                    vs.sort_column = col
+                    vs.sort_ascending = True
+                vs.scroll = 0
+                vs.cursor = 0
 
         # ── Cursor navigation ──
         if k == curses.KEY_UP:
-            if current_view == "watchlist":
-                # sorted_items is defined later during rendering; compute here.
-                # We'll use items_to_track to approximate (sort happens in render).
-                watchlist_cursor = max(0, watchlist_cursor - 1)
-            else:
-                portfolio_cursor = max(0, portfolio_cursor - 1)
+            views[current_view].cursor = max(0, views[current_view].cursor - 1)
         elif k == curses.KEY_DOWN:
-            if current_view == "watchlist":
-                max_idx = max(0, len(items_to_track) - 1)
-                watchlist_cursor = min(max_idx, watchlist_cursor + 1)
-            else:
-                max_idx = max(0, len(portfolio.get("items", [])) - 1)
-                portfolio_cursor = min(max_idx, portfolio_cursor + 1)
+            max_idx = max(0, len(items_to_track) - 1) if current_view == "watchlist" else max(0, len(portfolio.get("items", [])) - 1)
+            views[current_view].cursor = min(max_idx, views[current_view].cursor + 1)
 
         # ── Delete selected item ──
         if k == ord('d') and current_view == "watchlist" and items_to_track:
-            # Build sorted list to find what's at cursor
             sorted_items = sorted(
                 items_to_track,
-                key=lambda i: get_sort_value(i, prices, sort_column),
-                reverse=not sort_ascending,
+                key=lambda i: get_sort_value(i, prices, views["watchlist"].sort_column),
+                reverse=not views["watchlist"].sort_ascending,
             )
-            if 0 <= watchlist_cursor < len(sorted_items):
-                selected = sorted_items[watchlist_cursor]
+            if 0 <= views["watchlist"].cursor < len(sorted_items):
+                selected = sorted_items[views["watchlist"].cursor]
                 name_str = format_item_line(selected)
                 if confirm_dialog(stdscr, f'Remove "{name_str}"?'):
                     items_to_track.remove(selected)
                     save_items(items_to_track)
-                    watchlist_cursor = min(watchlist_cursor, max(0, len(items_to_track) - 1))
+                    views["watchlist"].cursor = min(views["watchlist"].cursor, max(0, len(items_to_track) - 1))
                     should_refresh = True
 
         # ── Add item wizard ──
@@ -205,59 +203,35 @@ def draw_menu(stdscr):
             if new_item is not None:
                 items_to_track.append(new_item)
                 save_items(items_to_track)
-                watchlist_cursor = len(items_to_track) - 1
-                watchlist_scroll = 0
+                views["watchlist"].cursor = len(items_to_track) - 1
+                views["watchlist"].scroll = 0
                 should_refresh = True
 
         # ── Scrolling ──
+        vs = views[current_view]
         if k == curses.KEY_PPAGE:  # PgUp
-            if current_view == "watchlist":
-                watchlist_scroll -= max(1, height - 8 - banner_height)
-            else:
-                portfolio_scroll -= max(1, height - 8 - banner_height)
+            vs.scroll -= max(1, content_rows)
         elif k == curses.KEY_NPAGE:  # PgDn
-            if current_view == "watchlist":
-                watchlist_scroll += max(1, height - 8 - banner_height)
-            else:
-                portfolio_scroll += max(1, height - 8 - banner_height)
-        elif k == 21:  # Ctrl-U (half page up)
-            if current_view == "watchlist":
-                watchlist_scroll -= max(1, (height - 8 - banner_height) // 2)
-            else:
-                portfolio_scroll -= max(1, (height - 8 - banner_height) // 2)
-        elif k == 4:  # Ctrl-D (half page down)
-            if current_view == "watchlist":
-                watchlist_scroll += max(1, (height - 8 - banner_height) // 2)
-            else:
-                portfolio_scroll += max(1, (height - 8 - banner_height) // 2)
+            vs.scroll += max(1, content_rows)
+        elif k == 21:  # Ctrl-U
+            vs.scroll -= max(1, content_rows // 2)
+        elif k == 4:  # Ctrl-D
+            vs.scroll += max(1, content_rows // 2)
         elif k == ord('g'):
-            if current_view == "watchlist":
-                watchlist_scroll = 0
-                watchlist_cursor = 0
-            else:
-                portfolio_scroll = 0
-                portfolio_cursor = 0
+            vs.scroll = 0
+            vs.cursor = 0
         elif k == ord('G'):
-            if current_view == "watchlist":
-                watchlist_scroll = 10**9
-                watchlist_cursor = max(0, len(items_to_track) - 1)
-            else:
-                portfolio_scroll = 10**9
-                portfolio_cursor = max(0, len(portfolio.get("items", [])) - 1)
+            data_len = len(items_to_track) if current_view == "watchlist" else len(portfolio.get("items", []))
+            vs.scroll = 10**9
+            vs.cursor = max(0, data_len - 1)
 
         # ── Auto-scroll cursor into view ──
-        max_visible = max(1, height - 8 - banner_height)
-        if current_view == "watchlist":
-            if watchlist_cursor < watchlist_scroll:
-                watchlist_scroll = watchlist_cursor
-            elif watchlist_cursor >= watchlist_scroll + max_visible and len(items_to_track) > 0:
-                watchlist_scroll = watchlist_cursor - max_visible + 1
-        else:
-            portfolio_len = len(portfolio.get("items", []))
-            if portfolio_cursor < portfolio_scroll:
-                portfolio_scroll = portfolio_cursor
-            elif portfolio_cursor >= portfolio_scroll + max_visible and portfolio_len > 0:
-                portfolio_scroll = portfolio_cursor - max_visible + 1
+        vs = views[current_view]
+        data_len = len(items_to_track) if current_view == "watchlist" else len(portfolio.get("items", []))
+        if vs.cursor < vs.scroll:
+            vs.scroll = vs.cursor
+        elif vs.cursor >= vs.scroll + content_rows and data_len > 0:
+            vs.scroll = vs.cursor - content_rows + 1
 
         # ── External file change detection ──
         new_mtime = get_items_mtime()
@@ -266,23 +240,64 @@ def draw_menu(stdscr):
             if loaded is not None:
                 items_to_track = loaded
                 items_mtime = new_mtime
-                watchlist_scroll = 0
-                watchlist_cursor = 0
+                views["watchlist"].scroll = 0
+                views["watchlist"].cursor = 0
+
+        # ── Async fetch completion check ──
+        if loading:
+            # Price fetch done?
+            if price_thread and not price_thread.is_alive() and price_data is not None:
+                api_response = price_data
+                price_data = None
+                price_thread = None
+                last_update = time.time()
+                if isinstance(api_response, dict) and "error" in api_response:
+                    error_message = api_response["error"]
+                else:
+                    prices = api_response
+                    error_message = ""
+
+            # Portfolio fetch done?
+            if portfolio_slug and portfolio_thread and not portfolio_thread.is_alive() and portfolio_data is not None:
+                portfolio_response = portfolio_data
+                portfolio_data = None
+                portfolio_thread = None
+                if isinstance(portfolio_response, dict) and "error" in portfolio_response:
+                    portfolio_error = portfolio_response["error"]
+                elif isinstance(portfolio_response, dict):
+                    portfolio = portfolio_response
+                    portfolio_error = ""
+
+            # Both fetches complete → clear loading state
+            if (price_thread is None) and (not portfolio_slug or portfolio_thread is None):
+                loading = False
 
         # ── WATCHLIST VIEW ──
         if current_view == "watchlist":
-            render_watchlist(stdscr, 0, width, items_to_track, prices,
-                            sort_column, sort_ascending, watchlist_scroll,
-                            watchlist_cursor, max_visible, banner_height,
-                            error_message)
+            if loading:
+                y_pos = 6 if banner_height else 0
+                msg = f"{spinner_frames[spinner_frame]} Fetching prices from PriceEmpire..."
+                safe_addstr(stdscr, y_pos, 2, msg[:width-4])
+            else:
+                vs = views["watchlist"]
+                render_watchlist(stdscr, 0, width, items_to_track, prices,
+                                vs.sort_column, vs.sort_ascending, vs.scroll,
+                                vs.cursor, max_visible, banner_height,
+                                error_message)
 
         # ── PORTFOLIO VIEW ──
         else:
-            render_portfolio(stdscr, 0, width, portfolio, portfolio_slug,
-                            prices, portfolio_sort_column,
-                            portfolio_sort_ascending, portfolio_scroll,
-                            portfolio_cursor, max_visible, banner_height,
-                            portfolio_error)
+            if loading:
+                y_pos = 6 if banner_height else 0
+                msg = f"{spinner_frames[spinner_frame]} Fetching prices and portfolio..."
+                safe_addstr(stdscr, y_pos, 2, msg[:width-4])
+            else:
+                vs = views["portfolio"]
+                render_portfolio(stdscr, 0, width, portfolio, portfolio_slug,
+                                prices, vs.sort_column,
+                                vs.sort_ascending, vs.scroll,
+                                vs.cursor, max_visible, banner_height,
+                                portfolio_error)
 
         # ── Refresh status (top right) ──
         if loading:

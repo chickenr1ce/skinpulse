@@ -1,7 +1,7 @@
 import requests
 import json
 import time
-from constants.weapons import KNIFE_NAMES
+
 
 class PriceEmpireScraper:
     def __init__(self, api_key):
@@ -12,9 +12,10 @@ class PriceEmpireScraper:
         }
 
     @staticmethod
-    def _convert_prices_to_dict(item):
+    def _mutate_prices_to_dict(item):
         """Convert item's prices list to a dict keyed by provider_key,
-        dividing raw cent values by 100 into euros."""
+        dividing raw cent values by 100 into euros.
+        Also scales avg_7d/30d/60d/90d fields when present."""
         prices_data = item.get('prices', [])
         if isinstance(prices_data, list):
             prices_dict = {}
@@ -22,19 +23,20 @@ class PriceEmpireScraper:
                 if isinstance(entry, dict) and 'provider_key' in entry:
                     if entry.get('price') is not None:
                         entry['price'] = entry['price'] / 100
+                    for avg_key in ('avg_7', 'avg_30', 'avg_60', 'avg_90'):
+                        if entry.get(avg_key) is not None:
+                            entry[avg_key] = entry[avg_key] / 100
                     prices_dict[entry['provider_key']] = entry
             item['prices'] = prices_dict
 
-    def get_prices(self, market_hash_names=None):
-        """
-        Fetches prices for all items or specific items.
-        market_hash_names: list of strings (optional)
-        """
+    def get_prices(self):
+        """Fetches prices for all items."""
         url = f"{self.base_url}/items/prices"
         params = {
             "app_id": 730,
             "currency": "EUR",
-            "sources": "buff163,skins"
+            "sources": "buff163,skins",
+            "avg": "true"
         }
         
         try:
@@ -49,7 +51,7 @@ class PriceEmpireScraper:
                         if not isinstance(item, dict):
                             continue
                         name = item.get('market_hash_name', item.get('name'))
-                        self._convert_prices_to_dict(item)
+                        self._mutate_prices_to_dict(item)
                         result[name] = item
                     return result
 
@@ -57,7 +59,7 @@ class PriceEmpireScraper:
                 if isinstance(data, dict):
                     for name, item in data.items():
                         if isinstance(item, dict):
-                            self._convert_prices_to_dict(item)
+                            self._mutate_prices_to_dict(item)
                     return data
                 
                 return {"error": "Unexpected API response format"}
@@ -72,13 +74,13 @@ class PriceEmpireScraper:
             response = requests.get(url, headers=self.headers, timeout=30)
             if response.status_code == 200:
                 data = response.json()
-                self._normalize_portfolio(data)
+                self._mutate_portfolio_cents_to_euros(data)
                 return data
             return {"error": f"API status {response.status_code}"}
         except Exception as e:
             return {"error": str(e)}
 
-    def _normalize_portfolio(self, data):
+    def _mutate_portfolio_cents_to_euros(self, data):
         if not isinstance(data, dict):
             return
         stats = data.get("stats", {})
@@ -98,27 +100,4 @@ class PriceEmpireScraper:
                         if key in item_stats and isinstance(item_stats[key], (int, float)):
                             item_stats[key] = item_stats[key] / 100
 
-def format_market_hash_name(item):
-    name = item.get('name')
-    wear = item.get('wear')
-    stattrak = item.get('stattrak', False)
-    
-    # Format: "StatTrak™ " (if true) + name + " (" + wear + ")"
-    # Example: "★ Karambit | Black Laminate (Well-Worn)"
-    # Note: PriceEmpire uses exact Steam Market Hash Names.
-    
-    # Prepend ★ for knives. Use exact weapon-part lookup (not substring — "Bayonet" and
-    # "Shadow Daggers" don't contain "Knife", and the full name is "Weapon | Skin").
-    full_name = name
-    weapon_part = name.split(' | ')[0] if ' | ' in name else name
-    if weapon_part in KNIFE_NAMES and not name.startswith("★"):
-        full_name = "★ " + name
-        
-    if stattrak:
-        full_name = "StatTrak™ " + full_name
-        
-    if wear:
-        full_name = f"{full_name} ({wear})"
-        
-    return full_name
 

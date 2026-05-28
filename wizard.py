@@ -8,108 +8,11 @@ are used by the main TUI loop as well.
 import curses
 from items import (
     find_weapon, WEAPONS, _capitalize_skin, normalize_wear,
-    format_item_line as fmt_item_line,
+    format_item_line as fmt_item_line, format_market_hash_name,
 )
-from price_empire_scraper import format_market_hash_name
-from utils import validate_item, parse_suggestion_api_name, apply_suggestion
+from utils import validate_item, parse_suggestion_api_name, apply_suggestion, ValidationResult, SuggestionAction, resolve_suggestion_choice
+from curses_utils import safe_addstr, draw_centered_box, curses_input_blocking, confirm_dialog
 
-
-def safe_addstr(stdscr, y, x, text, attr=0):
-    """Add string to screen, silently ignoring curses.error if coords are out of bounds."""
-    try:
-        stdscr.addstr(y, x, text, attr)
-    except curses.error:
-        pass
-
-
-def draw_centered_box(stdscr, box_y, box_x, box_h, box_w):
-    """Draw a box with double-line corners at (box_y, box_x) with given dimensions."""
-    if box_h < 3 or box_w < 4:
-        return
-    safe_addstr(stdscr, box_y, box_x, "╔" + "═" * (box_w - 2) + "╗")
-    for row in range(1, box_h - 1):
-        safe_addstr(stdscr, box_y + row, box_x, "║")
-        safe_addstr(stdscr, box_y + row, box_x + box_w - 1, "║")
-    safe_addstr(stdscr, box_y + box_h - 1, box_x, "╚" + "═" * (box_w - 2) + "╝")
-
-
-def curses_input_blocking(stdscr, y, x, max_width, prompt="", initial=""):
-    """Blocking text input widget. Returns the entered string or None on Escape.
-
-    Renders 'prompt' + cursor at (y, x). Handles printable chars, Backspace,
-    Enter (submit), Escape (cancel). Assumes nodelay(False) is already set.
-    """
-    buffer = list(initial)
-    while True:
-        # Render
-        display = prompt + "".join(buffer)
-        safe_addstr(stdscr, y, x, " " * (max_width + 2))
-        safe_addstr(stdscr, y, x, display[:max_width])
-        stdscr.refresh()
-        ch = stdscr.getch()
-        if ch == 27:  # Escape
-            return None
-        elif ch in (10, 13, curses.KEY_ENTER):  # Enter
-            return "".join(buffer)
-        elif ch in (127, curses.KEY_BACKSPACE, 8):  # Backspace
-            if buffer:
-                buffer.pop()
-        elif 32 <= ch <= 126 and len("".join(buffer)) < max_width:  # Printable
-            buffer.append(chr(ch))
-        # else ignore
-
-
-def confirm_dialog(stdscr, message):
-    """Show a centered modal confirmation dialog. Returns True for yes, False for no.
-
-    Operates in blocking mode (sets nodelay(False) temporarily).
-    """
-    height, width = stdscr.getmaxyx()
-    stdscr.nodelay(False)
-    stdscr.timeout(-1)
-    curses.curs_set(0)
-
-    # Dialog dimensions
-    msg_lines = message.split('\n')
-    box_w = max(40, min(60, width - 4))
-    box_h = max(5, len(msg_lines) + 4)
-    box_y = (height - box_h) // 2
-    box_x = (width - box_w) // 2
-
-    # Capture area underneath
-    try:
-        stdscr.refresh()
-    except curses.error:
-        pass
-
-    result = False
-    while True:
-        draw_centered_box(stdscr, box_y, box_x, box_h, box_w)
-        # Message
-        for i, line in enumerate(msg_lines):
-            safe_addstr(stdscr, box_y + 1 + i, box_x + 2, line[:box_w - 4])
-        # Prompt
-        prompt_y = box_y + box_h - 2
-        safe_addstr(stdscr, prompt_y, box_x + 2, "(y)es  (n)o", curses.A_REVERSE)
-        stdscr.refresh()
-
-        ch = stdscr.getch()
-        if ch in (ord('y'), ord('Y')):
-            result = True
-            break
-        elif ch in (ord('n'), ord('N'), 27):  # n, Escape
-            result = False
-            break
-
-    # Restore state to standard TUI values
-    stdscr.nodelay(True)
-    stdscr.timeout(100)
-    return result
-
-
-def _wizard_draw_box(stdscr, box_h, box_w, box_y, box_x):
-    """Draw a bordered box used by wizard steps."""
-    draw_centered_box(stdscr, box_y, box_x, box_h, box_w)
 
 
 def _wizard_weapon_search(stdscr, width, height):
@@ -131,7 +34,7 @@ def _wizard_weapon_search(stdscr, width, height):
         for row in range(box_h):
             safe_addstr(stdscr, box_y + row, box_x, " " * box_w)
 
-        _wizard_draw_box(stdscr, box_h, box_w, box_y, box_x)
+        draw_centered_box(stdscr, box_y, box_x, box_h, box_w)
 
         # Title
         safe_addstr(stdscr, box_y + 1, box_x + 2, "Weapon Selection", curses.A_BOLD)
@@ -211,6 +114,25 @@ def _wizard_weapon_search(stdscr, width, height):
         # else ignore
 
 
+def _wizard_skin_input(stdscr, box_y, box_x, box_w, weapon, prompt="Skin: "):
+    """Draw the skin input box and return the entered skin string or None.
+
+    Clears the box area, draws the border, shows the weapon name,
+    and blocks for text input. Returns a title-cased skin name, or None
+    on Escape / empty input.
+    """
+    box_h = 5
+    for row in range(box_h):
+        safe_addstr(stdscr, box_y + row, box_x, " " * box_w)
+    draw_centered_box(stdscr, box_y, box_x, box_h, box_w)
+    safe_addstr(stdscr, box_y + 1, box_x + 2, f"Weapon: {weapon}", curses.A_BOLD)
+    skin = curses_input_blocking(stdscr, box_y + 2, box_x + 2, box_w - 12, prompt=prompt)
+    if skin is None:
+        return None
+    skin = _capitalize_skin(skin.strip())
+    return skin if skin else None
+
+
 def _wizard_validate_step(stdscr, width, height, item, api_key, scraper, prices_cache):
     """Step 4: Validate item against API, handle suggestions.
 
@@ -224,14 +146,14 @@ def _wizard_validate_step(stdscr, width, height, item, api_key, scraper, prices_
     # Clear area
     for row in range(box_h):
         safe_addstr(stdscr, box_y + row, box_x, " " * box_w)
-    _wizard_draw_box(stdscr, box_h, box_w, box_y, box_x)
+    draw_centered_box(stdscr, box_y, box_x, box_h, box_w)
 
     safe_addstr(stdscr, box_y + 1, box_x + 2, "Checking API...", curses.A_BOLD)
     stdscr.refresh()
 
     # Run validation (use cached prices for speed, fall back to fresh API call)
-    found, result, prices_data = validate_item(item, api_key=api_key, scraper=scraper,
-                                                prices_data=prices_cache)
+    validation = validate_item(item, api_key=api_key, scraper=scraper,
+                               prices_data=prices_cache)
     curses.flushinp()  # Discard any keystrokes typed during the blocking API call
 
     current_item = dict(item)  # mutable copy
@@ -240,18 +162,18 @@ def _wizard_validate_step(stdscr, width, height, item, api_key, scraper, prices_
         # Clear and redraw
         for row in range(box_h):
             safe_addstr(stdscr, box_y + row, box_x, " " * box_w)
-        _wizard_draw_box(stdscr, box_h, box_w, box_y, box_x)
+        draw_centered_box(stdscr, box_y, box_x, box_h, box_w)
 
         y = box_y + 1
 
-        if found is True:
+        if validation.status == "found":
             # Found with prices
             safe_addstr(stdscr, y, box_x + 2, "✓ Item found in API!", curses.A_BOLD)
             y += 1
             safe_addstr(stdscr, y, box_x + 2,
                         f"{fmt_item_line(current_item):<{box_w - 4}}")
             y += 1
-            price_info = result
+            price_info = validation.data
             for source in ('buff163', 'skins'):
                 if source in price_info:
                     safe_addstr(stdscr, y, box_x + 2,
@@ -267,9 +189,9 @@ def _wizard_validate_step(stdscr, width, height, item, api_key, scraper, prices_
                 elif ch == 27:
                     return None
 
-        elif found is False:
+        elif validation.status == "not_found":
             # Not found — show similar items
-            similar = result
+            similar = validation.data
             safe_addstr(stdscr, y, box_x + 2,
                         f"⚠ '{format_market_hash_name(current_item)}' not found",
                         curses.A_BOLD)
@@ -291,25 +213,23 @@ def _wizard_validate_step(stdscr, width, height, item, api_key, scraper, prices_
             ch = stdscr.getch()
             if ch == 27 or ch in (ord('c'), ord('C')):
                 return None
-            elif ch in (ord('p'), ord('P'), ord('y'), ord('Y')):
+            if ch in (ord('p'), ord('P'), ord('y'), ord('Y')):
                 return current_item
-            elif ch in (ord('r'), ord('R')):
-                # Signal retry by returning a special value — caller handles skin re-entry
+            if ch in (ord('r'), ord('R')):
                 return "RETRY"
-            elif 48 < ch <= 57:  # Number keys 1-9
+            # Number keys 1-9
+            if 48 < ch <= 57:
                 idx = ch - 49  # 0-based
                 if similar and 0 <= idx < len(similar):
-                    selected_item, price_info = apply_suggestion(similar, idx, prices_data, current_item.get('stattrak', False))
+                    selected_item, price_info = apply_suggestion(similar, idx, validation.prices, current_item.get('stattrak', False), current_item.get('souvenir', False))
                     current_item = selected_item
-                    found = True
-                    result = price_info
-                    # Loop to show updated info
+                    validation = ValidationResult("found", price_info, validation.prices)
 
         else:
             # API error or no key
             safe_addstr(stdscr, y, box_x + 2, "⚠ API validation unavailable", curses.A_BOLD)
             y += 1
-            safe_addstr(stdscr, y, box_x + 2, str(result)[:box_w - 6])
+            safe_addstr(stdscr, y, box_x + 2, str(validation.data)[:box_w - 6])
             y += 1
             if y < box_y + box_h - 2:
                 safe_addstr(stdscr, y, box_x + 2, "(p)roceed anyway  (c)ancel")
@@ -351,16 +271,8 @@ def run_add_wizard(stdscr, scraper, api_key, prices_cache):
         box_y = (height - box_h) // 2
         box_x = (width - box_w) // 2
 
-        for row in range(box_h):
-            safe_addstr(stdscr, box_y + row, box_x, " " * box_w)
-        _wizard_draw_box(stdscr, box_h, box_w, box_y, box_x)
-        safe_addstr(stdscr, box_y + 1, box_x + 2, f"Weapon: {weapon}", curses.A_BOLD)
-        skin = curses_input_blocking(stdscr, box_y + 2, box_x + 2, box_w - 12,
-                                     prompt="Skin: ")
+        skin = _wizard_skin_input(stdscr, box_y, box_x, box_w, weapon)
         if skin is None:
-            return None
-        skin = _capitalize_skin(skin.strip())
-        if not skin:
             return None
 
         # ══════════════════════════════════════════════════════
@@ -368,7 +280,7 @@ def run_add_wizard(stdscr, scraper, api_key, prices_cache):
         # ══════════════════════════════════════════════════════
         for row in range(box_h):
             safe_addstr(stdscr, box_y + row, box_x, " " * box_w)
-        _wizard_draw_box(stdscr, box_h, box_w, box_y, box_x)
+        draw_centered_box(stdscr, box_y, box_x, box_h, box_w)
         safe_addstr(stdscr, box_y + 1, box_x + 2, f"Item: {weapon} | {skin}", curses.A_BOLD)
         wear_raw = curses_input_blocking(stdscr, box_y + 2, box_x + 2, box_w - 12,
                                          prompt="Wear [fn/mw/ft/ww/bs] none: ")
@@ -379,7 +291,7 @@ def run_add_wizard(stdscr, scraper, api_key, prices_cache):
         # ══════════════════════════════════════════════════════
         for row in range(box_h):
             safe_addstr(stdscr, box_y + row, box_x, " " * box_w)
-        _wizard_draw_box(stdscr, box_h, box_w, box_y, box_x)
+        draw_centered_box(stdscr, box_y, box_x, box_h, box_w)
         safe_addstr(stdscr, box_y + 1, box_x + 2,
                     f"Item: {fmt_item_line({'name': f'{weapon} | {skin}', 'wear': wear, 'stattrak': False})}",
                     curses.A_BOLD)
@@ -396,9 +308,30 @@ def run_add_wizard(stdscr, scraper, api_key, prices_cache):
                 break
 
         # ══════════════════════════════════════════════════════
-        # STEP 4: API Validation (with retry loop)
+        # STEP 4: Souvenir
         # ══════════════════════════════════════════════════════
-        item = {"name": f"{weapon} | {skin}", "wear": wear, "stattrak": stattrak}
+        for row in range(box_h):
+            safe_addstr(stdscr, box_y + row, box_x, " " * box_w)
+        draw_centered_box(stdscr, box_y, box_x, box_h, box_w)
+        safe_addstr(stdscr, box_y + 1, box_x + 2,
+                    f"Item: {fmt_item_line({'name': f'{weapon} | {skin}', 'wear': wear, 'stattrak': stattrak, 'souvenir': False})}",
+                    curses.A_BOLD)
+        safe_addstr(stdscr, box_y + 2, box_x + 2, "Souvenir? (y/N): ")
+
+        souvenir = False
+        stdscr.refresh()
+        while True:
+            ch = stdscr.getch()
+            if ch in (ord('y'), ord('Y')):
+                souvenir = True
+                break
+            elif ch in (10, 13, curses.KEY_ENTER, ord('n'), ord('N'), 27):
+                break
+
+        # ══════════════════════════════════════════════════════
+        # STEP 5: API Validation (with retry loop)
+        # ══════════════════════════════════════════════════════
+        item = {"name": f"{weapon} | {skin}", "wear": wear, "stattrak": stattrak, "souvenir": souvenir}
 
         while True:
             result_item = _wizard_validate_step(stdscr, width, height, item,
@@ -407,26 +340,17 @@ def run_add_wizard(stdscr, scraper, api_key, prices_cache):
                 return None
             if result_item == "RETRY":
                 # Retry — re-enter skin name
-                for row in range(min(8, height - 2)):
-                    safe_addstr(stdscr, box_y + row, box_x, " " * box_w)
-                _wizard_draw_box(stdscr, 5, box_w, box_y, box_x)
-                safe_addstr(stdscr, box_y + 1, box_x + 2,
-                            f"Weapon: {weapon}", curses.A_BOLD)
-                skin = curses_input_blocking(stdscr, box_y + 2, box_x + 2, box_w - 12,
-                                             prompt="Skin (retry): ")
+                skin = _wizard_skin_input(stdscr, box_y, box_x, box_w, weapon,
+                                          prompt="Skin (retry): ")
                 if skin is None:
                     return None
-                skin = _capitalize_skin(skin.strip())
-                if not skin:
-                    return None
-                item = {"name": f"{weapon} | {skin}", "wear": wear, "stattrak": stattrak}
-                # Re-enter validation flow
+                item = {"name": f"{weapon} | {skin}", "wear": wear, "stattrak": stattrak, "souvenir": souvenir}
                 continue
             item = result_item
             break
 
         # ══════════════════════════════════════════════════════
-        # STEP 5: Final Confirmation
+        # STEP 6: Final Confirmation
         # ══════════════════════════════════════════════════════
         item_line = fmt_item_line(item)
         short_line = item_line[:50]

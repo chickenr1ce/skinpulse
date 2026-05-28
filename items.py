@@ -1,7 +1,7 @@
 import os
 import re
 
-from constants.weapons import WEAPONS
+from constants.weapons import KNIFE_NAMES, WEAPONS
 from constants.wear import WEAR_MAP
 
 ITEMS_FILE = 'items.txt'
@@ -56,41 +56,37 @@ def split_name(raw):
     if not raw:
         return (raw, None)
 
-    # Try explicit separator first: " | " or "|"
-    if ' | ' in raw:
-        parts = raw.split(' | ', 1)
-        weapon_part = parts[0].strip()
-        skin_part = parts[1].strip() or None
-        if skin_part:
-            skin_part = _capitalize_skin(skin_part)
-        # Normalize weapon part against known weapons
-        for weapon in WEAPONS:
-            if _normalize(weapon_part) == _normalize(weapon):
-                return (weapon, skin_part)
-        return (weapon_part, skin_part)
-    if '|' in raw:
-        parts = raw.split('|', 1)
-        weapon_part = parts[0].strip()
-        skin_part = parts[1].strip() or None
-        if skin_part:
-            skin_part = _capitalize_skin(skin_part)
-        for weapon in WEAPONS:
-            if _normalize(weapon_part) == _normalize(weapon):
-                return (weapon, skin_part)
-        return (weapon_part, skin_part)
+    # Try explicit separators first: " | " or "|"
+    for sep in (' | ', '|'):
+        if sep in raw:
+            weapon_part, skin_part = raw.split(sep, 1)
+            weapon_part = weapon_part.strip()
+            skin_part = skin_part.strip() or None
+            if skin_part:
+                skin_part = _capitalize_skin(skin_part)
+            for weapon in WEAPONS:
+                if _normalize(weapon_part) == _normalize(weapon):
+                    return (weapon, skin_part)
+            return (weapon_part, skin_part)
 
-    # Try matching against known weapons using normalized comparison.
-    # Sort by length descending so "M4A1-S" matches before "M4A1".
+    # Combined shortcut: "AK-47 Redline" or "ak47 redline"
+    # Try each weapon as a prefix, longest first.
+    raw_norm = _normalize(raw)
     for weapon in sorted(WEAPONS, key=len, reverse=True):
         weapon_norm = _normalize(weapon)
-        raw_norm = _normalize(raw)
-        raw_lower = raw.lower()
-        # Check if raw starts with the weapon name (with optional space/dash after)
+
+        # Exact normalized match: raw IS a weapon name
         if raw_norm == weapon_norm:
             return (weapon, None)
-        if raw_norm.startswith(weapon_norm):
-            # Find where the weapon name ends in the original raw string
-            # by scanning forward until we've consumed enough normalized chars
+
+        # Literal prefix match (handles "AK-47 Redline", "M4A1-S Printstream")
+        pattern = rf'({re.escape(weapon)})\s*(?:\||\s|-)\s*(.+)'
+        m = re.match(pattern, raw, re.IGNORECASE)
+        if m:
+            return (weapon, _capitalize_skin(m.group(2)))
+
+        # Normalized prefix match (handles "ak47 redline", "m4a1s printstream")
+        if raw_norm.startswith(weapon_norm) and len(raw_norm) > len(weapon_norm):
             consumed = 0
             pos = 0
             for ch in raw:
@@ -100,21 +96,10 @@ def split_name(raw):
                     consumed += 1
                 pos += 1
             rest = raw[pos:].strip()
-            # Strip leading separators like "-", "|", spaces
             rest = re.sub(r'^[\s\-|]+', '', rest).strip()
             if rest:
                 return (weapon, _capitalize_skin(rest))
 
-    # Fallback: try to split on the first " - " or " — "
-    for sep in [' - ', ' — ']:
-        if sep in raw:
-            parts = raw.split(sep, 1)
-            skin_part = parts[1].strip() or None
-            if skin_part:
-                skin_part = _capitalize_skin(skin_part)
-            return (parts[0].strip(), skin_part)
-
-    # Cannot split — return as-is (caller may treat the whole thing as a name)
     return (raw, None)
 
 
@@ -153,8 +138,12 @@ def parse_item_line(line):
         return None
 
     stattrak = False
+    souvenir = False
     if line.upper().startswith('ST '):
         stattrak = True
+        line = line[3:].strip()
+    if line.upper().startswith('SV '):
+        souvenir = True
         line = line[3:].strip()
 
     if ',' in line:
@@ -170,11 +159,13 @@ def parse_item_line(line):
     if not name:
         return None
 
-    return {"name": name, "wear": wear, "stattrak": stattrak}
+    return {"name": name, "wear": wear, "stattrak": stattrak, "souvenir": souvenir}
 
 
 def format_item_line(item):
     prefix = 'ST ' if item.get('stattrak') else ''
+    if item.get('souvenir'):
+        prefix = 'SV ' + prefix
     name = item.get('name', '')
     wear = item.get('wear')
     if wear:
@@ -206,3 +197,34 @@ def get_items_mtime(path=ITEMS_FILE):
         return os.path.getmtime(path)
     except FileNotFoundError:
         return 0
+
+
+def format_market_hash_name(item):
+    """Turn an item dict into a Steam Market Hash Name.
+
+    Handles Souvenir prefix, StatTrak prefix, ★ prefix for knives, and wear suffix.
+    Example: 'Souvenir AK-47 | B the Monster (Field-Tested)'
+    Example: 'StatTrak™ ★ Karambit | Black Laminate (Well-Worn)'
+    """
+    name = item.get('name')
+    wear = item.get('wear')
+    stattrak = item.get('stattrak', False)
+    souvenir = item.get('souvenir', False)
+
+    # Prepend ★ for knives. Use exact weapon-part lookup (not substring — "Bayonet" and
+    # "Shadow Daggers" don't contain "Knife", and the full name is "Weapon | Skin").
+    full_name = name
+    weapon_part = name.split(' | ')[0] if ' | ' in name else name
+    if weapon_part in KNIFE_NAMES and not name.startswith("★"):
+        full_name = "★ " + name
+
+    if souvenir:
+        full_name = "Souvenir " + full_name
+
+    if stattrak:
+        full_name = "StatTrak™ " + full_name
+
+    if wear:
+        full_name = f"{full_name} ({wear})"
+
+    return full_name
