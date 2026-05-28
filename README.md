@@ -11,8 +11,8 @@ A terminal-based tool to track real-time skin prices across multiple marketplace
 
 1.  **Clone the repository** (if you haven't already):
     ```bash
-    git clone https://github.com/chickenr1ce/CS2_SkinPrice_Scraper.git
-    cd CS2_SkinPrice_Scraper
+    git clone https://github.com/chickenr1ce/skinpulse.git
+    cd skinpulse
     ```
 
 2.  **Verify Dependencies**:
