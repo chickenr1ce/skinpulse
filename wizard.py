@@ -221,7 +221,7 @@ def _wizard_validate_step(stdscr, width, height, item, api_key, scraper, prices_
             if 48 < ch <= 57:
                 idx = ch - 49  # 0-based
                 if similar and 0 <= idx < len(similar):
-                    selected_item, price_info = apply_suggestion(similar, idx, validation.prices, current_item.get('stattrak', False))
+                    selected_item, price_info = apply_suggestion(similar, idx, validation.prices, current_item.get('stattrak', False), current_item.get('souvenir', False))
                     current_item = selected_item
                     validation = ValidationResult("found", price_info, validation.prices)
 
@@ -308,9 +308,30 @@ def run_add_wizard(stdscr, scraper, api_key, prices_cache):
                 break
 
         # ══════════════════════════════════════════════════════
-        # STEP 4: API Validation (with retry loop)
+        # STEP 4: Souvenir
         # ══════════════════════════════════════════════════════
-        item = {"name": f"{weapon} | {skin}", "wear": wear, "stattrak": stattrak}
+        for row in range(box_h):
+            safe_addstr(stdscr, box_y + row, box_x, " " * box_w)
+        draw_centered_box(stdscr, box_y, box_x, box_h, box_w)
+        safe_addstr(stdscr, box_y + 1, box_x + 2,
+                    f"Item: {fmt_item_line({'name': f'{weapon} | {skin}', 'wear': wear, 'stattrak': stattrak, 'souvenir': False})}",
+                    curses.A_BOLD)
+        safe_addstr(stdscr, box_y + 2, box_x + 2, "Souvenir? (y/N): ")
+
+        souvenir = False
+        stdscr.refresh()
+        while True:
+            ch = stdscr.getch()
+            if ch in (ord('y'), ord('Y')):
+                souvenir = True
+                break
+            elif ch in (10, 13, curses.KEY_ENTER, ord('n'), ord('N'), 27):
+                break
+
+        # ══════════════════════════════════════════════════════
+        # STEP 5: API Validation (with retry loop)
+        # ══════════════════════════════════════════════════════
+        item = {"name": f"{weapon} | {skin}", "wear": wear, "stattrak": stattrak, "souvenir": souvenir}
 
         while True:
             result_item = _wizard_validate_step(stdscr, width, height, item,
@@ -323,13 +344,13 @@ def run_add_wizard(stdscr, scraper, api_key, prices_cache):
                                           prompt="Skin (retry): ")
                 if skin is None:
                     return None
-                item = {"name": f"{weapon} | {skin}", "wear": wear, "stattrak": stattrak}
+                item = {"name": f"{weapon} | {skin}", "wear": wear, "stattrak": stattrak, "souvenir": souvenir}
                 continue
             item = result_item
             break
 
         # ══════════════════════════════════════════════════════
-        # STEP 5: Final Confirmation
+        # STEP 6: Final Confirmation
         # ══════════════════════════════════════════════════════
         item_line = fmt_item_line(item)
         short_line = item_line[:50]

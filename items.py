@@ -138,8 +138,12 @@ def parse_item_line(line):
         return None
 
     stattrak = False
+    souvenir = False
     if line.upper().startswith('ST '):
         stattrak = True
+        line = line[3:].strip()
+    if line.upper().startswith('SV '):
+        souvenir = True
         line = line[3:].strip()
 
     if ',' in line:
@@ -155,11 +159,13 @@ def parse_item_line(line):
     if not name:
         return None
 
-    return {"name": name, "wear": wear, "stattrak": stattrak}
+    return {"name": name, "wear": wear, "stattrak": stattrak, "souvenir": souvenir}
 
 
 def format_item_line(item):
     prefix = 'ST ' if item.get('stattrak') else ''
+    if item.get('souvenir'):
+        prefix = 'SV ' + prefix
     name = item.get('name', '')
     wear = item.get('wear')
     if wear:
@@ -196,12 +202,14 @@ def get_items_mtime(path=ITEMS_FILE):
 def format_market_hash_name(item):
     """Turn an item dict into a Steam Market Hash Name.
 
-    Handles StatTrak prefix, ★ prefix for knives, and wear suffix.
+    Handles Souvenir prefix, StatTrak prefix, ★ prefix for knives, and wear suffix.
+    Example: 'Souvenir AK-47 | B the Monster (Field-Tested)'
     Example: 'StatTrak™ ★ Karambit | Black Laminate (Well-Worn)'
     """
     name = item.get('name')
     wear = item.get('wear')
     stattrak = item.get('stattrak', False)
+    souvenir = item.get('souvenir', False)
 
     # Prepend ★ for knives. Use exact weapon-part lookup (not substring — "Bayonet" and
     # "Shadow Daggers" don't contain "Knife", and the full name is "Weapon | Skin").
@@ -209,6 +217,9 @@ def format_market_hash_name(item):
     weapon_part = name.split(' | ')[0] if ' | ' in name else name
     if weapon_part in KNIFE_NAMES and not name.startswith("★"):
         full_name = "★ " + name
+
+    if souvenir:
+        full_name = "Souvenir " + full_name
 
     if stattrak:
         full_name = "StatTrak™ " + full_name

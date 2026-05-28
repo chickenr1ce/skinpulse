@@ -145,7 +145,11 @@ def cmd_add():
     response = _safe_input("StatTrak? (y/N): ").strip().lower()
     stattrak = response.startswith('y')
 
-    item = {"name": name, "wear": wear, "stattrak": stattrak}
+    # Step 5: Souvenir
+    response = _safe_input("Souvenir? (y/N): ").strip().lower()
+    souvenir = response.startswith('y')
+
+    item = {"name": name, "wear": wear, "stattrak": stattrak, "souvenir": souvenir}
     line = format_item_line(item)
     print(f"\nPreview: {line}")
 
@@ -201,7 +205,7 @@ def cmd_add():
                 return
             skin = _capitalize_skin(skin)
             name = f"{weapon} | {skin}"
-            item = {"name": name, "wear": wear, "stattrak": stattrak}
+            item = {"name": name, "wear": wear, "stattrak": stattrak, "souvenir": souvenir}
             line = format_item_line(item)
             print(f"\nPreview: {line}")
             validation = validate_item(item, api_key=api_key)
@@ -209,7 +213,7 @@ def cmd_add():
             continue
 
         if action == SuggestionAction.PICK and idx is not None:
-            item, result = apply_suggestion(similar, idx, prices_data, stattrak)
+            item, result = apply_suggestion(similar, idx, prices_data, stattrak, souvenir)
             validation = ValidationResult("found", result, prices_data)
             continue
 

@@ -29,18 +29,20 @@ def compute_scroll_indicator(total, scroll, max_visible):
 def get_sort_value(item, prices, sort_column):
     market_name = format_market_hash_name(item)
     item_data = prices.get(market_name, {})
-    price_dict = item_data.get('prices', {})
+    price_dict = item_data.get('prices', {}) if isinstance(item_data, dict) else {}
 
     if sort_column == 0:
         return market_name.lower()
     elif sort_column == 1:
         return price_dict.get('buff163', {}).get('price', 0.0) or 0.0
     elif sort_column == 2:
-        return price_dict.get('skins', {}).get('price', 0.0) or 0.0
+        return (price_dict.get('buff163', {}).get('avg_7', 0.0) or 0.0)
     elif sort_column == 3:
-        all_prices = [v.get('price', 0.0) for k, v in price_dict.items()
-                      if isinstance(v, dict) and v.get('price', 0.0) > 0]
-        return min(all_prices) if all_prices else 0.0
+        return (price_dict.get('buff163', {}).get('avg_30', 0.0) or 0.0)
+    elif sort_column == 4:
+        return (price_dict.get('buff163', {}).get('avg_60', 0.0) or 0.0)
+    elif sort_column == 5:
+        return (price_dict.get('buff163', {}).get('avg_90', 0.0) or 0.0)
     return 0.0
 
 
@@ -161,11 +163,12 @@ def render_watchlist(stdscr, y, width, items_to_track, prices,
                      sort_column, sort_ascending, scroll, cursor,
                      max_visible, banner_height, error_message):
     """Render the full watchlist table."""
-    price_width = 9
-    name_width = max(20, width - (price_width * 3 + len(" │ ") * 3 + 4))
+    price_width = 8
+    trend_width = 5
+    name_width = max(20, width - (price_width * 5 + trend_width + len(" │ ") * 6 + 4))
 
-    col_headers = ["Item Name", "Buff 163", "Skins.com", "Lowest"]
-    arrows = ["", "", "", ""]
+    col_headers = ["Item Name", "Buff163", "7d Avg", "30d Avg", "60d Avg", "90d Avg", "Trend"]
+    arrows = [""] * 7
     if sort_column < len(col_headers):
         arrows[sort_column] = " ▲" if sort_ascending else " ▼"
 
@@ -175,9 +178,15 @@ def render_watchlist(stdscr, y, width, items_to_track, prices,
         {"header": col_headers[1] + arrows[1], "width": price_width, "fmt": f">{price_width}.2f",
          "getter": lambda row: (_row_buff_price(row, prices), 0)},
         {"header": col_headers[2] + arrows[2], "width": price_width, "fmt": f">{price_width}.2f",
-         "getter": lambda row: (_row_skins_price(row, prices), 0)},
+         "getter": lambda row: (_row_avg_price(row, prices, '7d'), _avg_color(row, prices, '7d'))},
         {"header": col_headers[3] + arrows[3], "width": price_width, "fmt": f">{price_width}.2f",
-         "getter": lambda row: (_row_min_price(row, prices), 0)},
+         "getter": lambda row: (_row_avg_price(row, prices, '30d'), _avg_color(row, prices, '30d'))},
+        {"header": col_headers[4] + arrows[4], "width": price_width, "fmt": f">{price_width}.2f",
+         "getter": lambda row: (_row_avg_price(row, prices, '60d'), _avg_color(row, prices, '60d'))},
+        {"header": col_headers[5] + arrows[5], "width": price_width, "fmt": f">{price_width}.2f",
+         "getter": lambda row: (_row_avg_price(row, prices, '90d'), _avg_color(row, prices, '90d'))},
+        {"header": col_headers[6] + arrows[6], "width": trend_width, "fmt": f"^{trend_width}",
+         "getter": lambda row: _render_sparkline(row, prices)},
     ]
 
     sorted_rows = sorted(items_to_track,
@@ -194,19 +203,68 @@ def _row_buff_price(row, prices):
     return item_data.get('prices', {}).get('buff163', {}).get('price', 0.0) or 0.0
 
 
-def _row_skins_price(row, prices):
-    item_name = format_market_hash_name(row)
-    item_data = prices.get(item_name, {})
-    return item_data.get('prices', {}).get('skins', {}).get('price', 0.0) or 0.0
+def _avg_color(row, prices, period):
+    """Return curses color_pair for an avg vs current buff163 price.
+    Green (1) when avg < current (price rising), red (2) when avg > current (falling)."""
+    avg = _row_avg_price(row, prices, period)
+    current = _row_buff_price(row, prices)
+    if avg <= 0 or current <= 0:
+        return 0
+    if current > avg:
+        return curses.color_pair(1)
+    elif current < avg:
+        return curses.color_pair(2)
+    return 0
 
 
-def _row_min_price(row, prices):
+def _row_avg_price(row, prices, period):
+    """Extract a historical average price (7d/30d/60d/90d) for an item."""
     item_name = format_market_hash_name(row)
     item_data = prices.get(item_name, {})
-    price_dict = item_data.get('prices', {})
-    all_prices = [v.get('price', 0.0) for k, v in price_dict.items()
-                  if isinstance(v, dict) and v.get('price', 0.0) > 0]
-    return min(all_prices) if all_prices else 0.0
+    price_dict = item_data.get('prices', {}) if isinstance(item_data, dict) else {}
+    # Averages live on the buff163 price entry
+    buff_entry = price_dict.get('buff163', {})
+    if isinstance(buff_entry, dict):
+        return buff_entry.get(f'avg_{period.replace("d","")}', 0.0) or 0.0
+    return 0.0
+
+
+def _render_sparkline(row, prices):
+    """Build a 4-char Unicode sparkline from 90d→60d→30d→7d averages.
+    Returns (sparkline_str, color_attr)."""
+    periods = ['90d', '60d', '30d', '7d']
+    avgs = [_row_avg_price(row, prices, p) for p in periods]
+
+    valid = [(i, v) for i, v in enumerate(avgs) if v and v > 0]
+    if len(valid) < 2:
+        return ("    ", 0)
+
+    chars = " ▁▂▃▄▅▆▇█"
+    min_v = min(v for _, v in valid)
+    max_v = max(v for _, v in valid)
+
+    if max_v == min_v:
+        result = "▄▄▄▄"
+    else:
+        result = ""
+        for i, v in enumerate(avgs):
+            if v and v > 0:
+                idx = int((v - min_v) / (max_v - min_v) * 7) + 1
+                result += chars[idx]
+            else:
+                result += " "
+
+    # Color: green if 7d > 90d (uptrend), red if down
+    first_valid = next((v for v in avgs if v and v > 0), 0)
+    last_valid = next((v for v in reversed(avgs) if v and v > 0), 0)
+    if last_valid > first_valid:
+        color = curses.color_pair(1)
+    elif last_valid < first_valid:
+        color = curses.color_pair(2)
+    else:
+        color = 0
+
+    return (result, color)
 
 
 def render_portfolio(stdscr, y, width, portfolio, portfolio_slug, prices,

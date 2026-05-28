@@ -109,7 +109,7 @@ def draw_menu(stdscr):
 
         if current_view == "watchlist":
             help_text = ("'q' quit | 'r' ref | 'p' port | 'a' add | 'd' del | "
-                         "↑↓ nav | '1'-'4' sort | ^D/^U sc | g/G top/bot")
+                         "↑↓ nav | '1'-'7' sort | ^D/^U sc | g/G top/bot")
             safe_addstr(stdscr, height - 1, 0, (help_text + scroll_indicator)[:width])
         else:
             help_text = ("'q' quit | 'r' ref | 'p' watch | "
@@ -163,7 +163,7 @@ def draw_menu(stdscr):
 
         if k in (ord('1'), ord('2'), ord('3'), ord('4'), ord('5'), ord('6'), ord('7')):
             col = k - ord('1')
-            max_cols = 4 if current_view == "watchlist" else 7
+            max_cols = 7 if current_view == "watchlist" else 7
             if col < max_cols:
                 vs = views[current_view]
                 if col == vs.sort_column:

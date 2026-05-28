@@ -14,22 +14,23 @@
 | `r` | Force refresh (API fetch) |
 | `p` | Toggle between watchlist and portfolio view |
 | `q` | Quit |
-| `1` - `4` | Sort watchlist by column (name/buff/skins/lowest). Press same key again to toggle asc/desc. ▲/▼ indicator shown in header. |
-| `1` - `6` | Sort portfolio by column (name/qty/buy/now/total/P&L/ROI). Same toggle behavior. |
+| `1` - `7` | Sort watchlist by column (name/buff163/7d/30d/60d/90d/trend). Press same key again to toggle asc/desc. ▲/▼ indicator shown in header. |
+| `1` - `7` | Sort portfolio by column (name/qty/buy/now/total/P&L/ROI). Same toggle behavior. |
 | `Ctrl-D` / `PgDn` | Scroll half/full page down |
 | `Ctrl-U` / `PgUp` | Scroll half/full page up |
 | `g` / `G` | Jump to top / bottom |
 | Auto | Refreshes every 300s |
 
-Price deltas show inline after each price: `320.50(+5.20)` — green for rises, red for drops. First load shows `(  ~  )` placeholder.
+Watchlist avg columns (7d/30d/60d/90d) and sparkline are green when current buff163 price exceeds the average, red when below.
 In portfolio view, P&L and ROI are green for profit, red for loss.
 Scrolling indicator in the help bar shows position (e.g. `↑ 12-17/17 ↓`) when items exceed terminal height.
 
 ## API (PriceEmpire Trader Tier)
 
 - Endpoint: `https://api.pricempire.com/v4/trader/items/prices`
-- Available sources: only `buff163` and `skins` (skins.com). Do not use `csfloat`, `skinport`, etc.
-- Currency: `EUR`. The API returns raw cents values; `price_empire_scraper.py` divides all `price` fields by 100.
+- Params: `sources=buff163,skins`, `avg=true`, `currency=EUR`.
+- Available sources: `buff163` and `skins` (skins.com). Do not use `csfloat`, `skinport`, etc. Note: the TUI watchlist only displays buff163 prices and historical averages.
+- Currency: `EUR`. The API returns raw cents values; `price_empire_scraper.py` divides all `price` and `avg_*` fields by 100.
 - Rate limit: auto-refresh every 300s in TUI; `'r'` for manual refresh; `'q'` to quit.
 
 ## Config

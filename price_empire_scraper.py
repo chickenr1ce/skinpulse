@@ -14,7 +14,8 @@ class PriceEmpireScraper:
     @staticmethod
     def _mutate_prices_to_dict(item):
         """Convert item's prices list to a dict keyed by provider_key,
-        dividing raw cent values by 100 into euros."""
+        dividing raw cent values by 100 into euros.
+        Also scales avg_7d/30d/60d/90d fields when present."""
         prices_data = item.get('prices', [])
         if isinstance(prices_data, list):
             prices_dict = {}
@@ -22,6 +23,9 @@ class PriceEmpireScraper:
                 if isinstance(entry, dict) and 'provider_key' in entry:
                     if entry.get('price') is not None:
                         entry['price'] = entry['price'] / 100
+                    for avg_key in ('avg_7', 'avg_30', 'avg_60', 'avg_90'):
+                        if entry.get(avg_key) is not None:
+                            entry[avg_key] = entry[avg_key] / 100
                     prices_dict[entry['provider_key']] = entry
             item['prices'] = prices_dict
 
@@ -31,7 +35,8 @@ class PriceEmpireScraper:
         params = {
             "app_id": 730,
             "currency": "EUR",
-            "sources": "buff163,skins"
+            "sources": "buff163,skins",
+            "avg": "true"
         }
         
         try:
