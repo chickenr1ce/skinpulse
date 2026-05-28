@@ -5,7 +5,7 @@ from items import (
     WEAPONS, find_weapon, split_name, _capitalize_skin, normalize_wear,
 )
 from price_empire_scraper import PriceEmpireScraper
-from utils import validate_item, load_config, apply_suggestion
+from utils import validate_item, load_config, apply_suggestion, ValidationResult, SuggestionAction, resolve_suggestion_choice
 
 
 def _safe_input(prompt=''):
@@ -153,76 +153,77 @@ def cmd_add():
     config_data = load_config()
     api_key = config_data.get('api_key')
     print("  Checking API...")
-    found, result, prices_data = validate_item(item, api_key=api_key)
+    validation = validate_item(item, api_key=api_key)
     _drain_stdin()  # Discard any keystrokes typed during the API wait
 
-    if found is None:
-        # API error or no key — warn but let user proceed
-        print(f"  {result}")
-    elif not found:
-        similar = result
+    # Validation + retry loop
+    while True:
+        if validation.status == "error":
+            print(f"  {validation.data}")
+            found = False
+            break
+
+        if validation.status == "found":
+            result = validation.data
+            prices_data = validation.prices
+            found = True
+            break
+
+        # status == "not_found"
+        similar = validation.data
+        prices_data = validation.prices
         print(f"\n  ⚠  '{format_market_hash_name(item)}' not found in API.")
         if similar:
             print("  Did you mean one of these?")
             for i, s in enumerate(similar):
                 print(f"    {i + 1}) {s}")
 
-        # Loop until a definitive action is taken
-        while True:
-            print()
-            choice = _safe_input(
-                "Choose a number, or (p)roceed anyway / (r)etry / (c)ancel: "
-            ).strip().lower()
+        print()
+        choice = _safe_input(
+            "Choose a number, or (p)roceed anyway / (r)etry / (c)ancel: "
+        ).strip().lower()
 
-            if not choice or choice in ('c',):
+        action, idx = resolve_suggestion_choice(choice, len(similar))
+
+        if action == SuggestionAction.CANCEL:
+            print("Cancelled.")
+            return
+
+        if action == SuggestionAction.PROCEED:
+            found = False
+            break
+
+        if action == SuggestionAction.RETRY:
+            print()
+            skin = _safe_input("Skin (e.g. 'Redline')> ").strip()
+            if not skin:
                 print("Cancelled.")
                 return
+            skin = _capitalize_skin(skin)
+            name = f"{weapon} | {skin}"
+            item = {"name": name, "wear": wear, "stattrak": stattrak}
+            line = format_item_line(item)
+            print(f"\nPreview: {line}")
+            validation = validate_item(item, api_key=api_key)
+            _drain_stdin()
+            continue
 
-            if choice in ('p', 'y'):
-                break  # proceed with original (unfound) item
+        if action == SuggestionAction.PICK and idx is not None:
+            item, result = apply_suggestion(similar, idx, prices_data, stattrak)
+            validation = ValidationResult("found", result, prices_data)
+            continue
 
-            if choice in ('r',):
-                # Re-prompt for skin name
-                print()
-                skin = _safe_input("Skin (e.g. 'Redline')> ").strip()
-                if not skin:
-                    print("Cancelled.")
-                    return
-                skin = _capitalize_skin(skin)
-                name = f"{weapon} | {skin}"
-                item = {"name": name, "wear": wear, "stattrak": stattrak}
-                line = format_item_line(item)
-                print(f"\nPreview: {line}")
-                found, result, prices_data = validate_item(item, api_key=api_key)
-                _drain_stdin()  # Discard stray keystrokes typed during the API wait
-                if found is None:
-                    print(f"  {result}")
-                    break
-                if found:
-                    break
-                # Still not found — show suggestions again and loop
-                similar = result
-                print(f"\n  ⚠  '{format_market_hash_name(item)}' not found in API.")
-                if similar:
-                    print("  Did you mean one of these?")
-                    for i, s in enumerate(similar):
-                        print(f"    {i + 1}) {s}")
-                continue
-
-            # Try number selection — pick a suggestion
-            try:
-                idx = int(choice) - 1
-                if 0 <= idx < len(similar):
-                    item, result = apply_suggestion(similar, idx, prices_data, stattrak)
-                    found = True
-                    break
-            except (ValueError, IndexError):
-                pass
-
-            print("  Invalid choice.")
+        print("  Invalid choice.")
+        # Re-display suggestions
+        similar = validation.data
+        print(f"\n  ⚠  '{format_market_hash_name(item)}' not found in API.")
+        if similar:
+            print("  Did you mean one of these?")
+            for i, s in enumerate(similar):
+                print(f"    {i + 1}) {s}")
 
     # Step 6: Final confirmation
-    if found is True:
+    if found:
         price_parts = []
         for source in ('buff163', 'skins'):
             if source in result:

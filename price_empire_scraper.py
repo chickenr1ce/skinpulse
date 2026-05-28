@@ -12,7 +12,7 @@ class PriceEmpireScraper:
         }
 
     @staticmethod
-    def _convert_prices_to_dict(item):
+    def _mutate_prices_to_dict(item):
         """Convert item's prices list to a dict keyed by provider_key,
         dividing raw cent values by 100 into euros."""
         prices_data = item.get('prices', [])
@@ -25,11 +25,8 @@ class PriceEmpireScraper:
                     prices_dict[entry['provider_key']] = entry
             item['prices'] = prices_dict
 
-    def get_prices(self, market_hash_names=None):
-        """
-        Fetches prices for all items or specific items.
-        market_hash_names: list of strings (optional)
-        """
+    def get_prices(self):
+        """Fetches prices for all items."""
         url = f"{self.base_url}/items/prices"
         params = {
             "app_id": 730,
@@ -49,7 +46,7 @@ class PriceEmpireScraper:
                         if not isinstance(item, dict):
                             continue
                         name = item.get('market_hash_name', item.get('name'))
-                        self._convert_prices_to_dict(item)
+                        self._mutate_prices_to_dict(item)
                         result[name] = item
                     return result
 
@@ -57,7 +54,7 @@ class PriceEmpireScraper:
                 if isinstance(data, dict):
                     for name, item in data.items():
                         if isinstance(item, dict):
-                            self._convert_prices_to_dict(item)
+                            self._mutate_prices_to_dict(item)
                     return data
                 
                 return {"error": "Unexpected API response format"}
@@ -72,13 +69,13 @@ class PriceEmpireScraper:
             response = requests.get(url, headers=self.headers, timeout=30)
             if response.status_code == 200:
                 data = response.json()
-                self._normalize_portfolio(data)
+                self._mutate_portfolio_cents_to_euros(data)
                 return data
             return {"error": f"API status {response.status_code}"}
         except Exception as e:
             return {"error": str(e)}
 
-    def _normalize_portfolio(self, data):
+    def _mutate_portfolio_cents_to_euros(self, data):
         if not isinstance(data, dict):
             return
         stats = data.get("stats", {})

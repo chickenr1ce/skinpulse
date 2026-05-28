@@ -5,6 +5,9 @@ Extracted from manage.py so both manage.py and tui.py can use them.
 
 import json
 import re
+from dataclasses import dataclass
+from enum import Enum, auto
+from typing import Literal
 
 from items import format_market_hash_name
 from price_empire_scraper import PriceEmpireScraper
@@ -25,26 +28,55 @@ def save_config(config):
         json.dump(config, f, indent=4)
 
 
+class SuggestionAction(Enum):
+    PICK = auto()
+    PROCEED = auto()
+    RETRY = auto()
+    CANCEL = auto()
+
+
+def resolve_suggestion_choice(choice: str, similar_count: int) -> tuple[SuggestionAction, int | None]:
+    """Parse raw user input into an action and optional 0-based index."""
+    choice = choice.strip().lower()
+    if choice in ('p', 'y'):
+        return SuggestionAction.PROCEED, None
+    if choice in ('r',):
+        return SuggestionAction.RETRY, None
+    if choice in ('c', ''):
+        return SuggestionAction.CANCEL, None
+    try:
+        idx = int(choice) - 1
+        if 0 <= idx < similar_count:
+            return SuggestionAction.PICK, idx
+    except ValueError:
+        pass
+    return SuggestionAction.CANCEL, None
+
+
 def _skin_similarity(a, b):
     """Return True if two skin names are likely the same item.
 
-    Compares normalized strings (lowercase, no spaces/punctuation).
-    Returns True if one is a substring of the other or they share
-    >80% of characters in common.
+    Uses difflib.SequenceMatcher for positional similarity instead of
+    the old character-set overlap metric (which scored "abcd" == "dcba").
     """
+    import difflib
+
     def norm(s):
-        return re.sub(r'[\s\'\-]+', '', s).lower()
+        return re.sub(r"[\s'\-]+", "", s).lower()
 
     norm_a, norm_b = norm(a), norm(b)
     if not norm_a or not norm_b:
         return False
-    if norm_a == norm_b:
+    if norm_a == norm_b or norm_a in norm_b or norm_b in norm_a:
         return True
-    if norm_a in norm_b or norm_b in norm_a:
-        return True
-    # Character overlap ratio
-    common = sum(1 for c in norm_a if c in norm_b)
-    return common / max(len(norm_a), len(norm_b)) > 0.8
+    return difflib.SequenceMatcher(None, norm_a, norm_b).ratio() > 0.8
+
+
+@dataclass(frozen=True)
+class ValidationResult:
+    status: Literal["found", "not_found", "error"]
+    data: dict | list | str
+    prices: dict | None
 
 
 def validate_item(item, api_key=None, scraper=None, prices_data=None):
@@ -57,11 +89,11 @@ def validate_item(item, api_key=None, scraper=None, prices_data=None):
         prices_data: optional pre-fetched prices dict (avoids extra API call).
 
     Returns:
-        - (True, price_info, prices) if found — price_info is a dict with
-          buff163/skins prices, prices is the full API response dict.
-        - (False, similar_names, prices) if not found — similar_names is
-          a list of up to 5 similar API names for suggestions.
-        - (None, error_msg, None) if the API call failed or no key.
+        ValidationResult with:
+        - status="found": data is price_info dict with buff163/skins prices,
+          prices is the full API response dict.
+        - status="not_found": data is a list of up to 5 similar API names.
+        - status="error": data is an error message string, prices is None.
     """
     # 1. Get prices data
     if prices_data is not None:
@@ -72,12 +104,12 @@ def validate_item(item, api_key=None, scraper=None, prices_data=None):
         scraper = PriceEmpireScraper(api_key)
         prices = scraper.get_prices()
     else:
-        return (None, "No api_key, scraper, or prices_data provided.", None)
+        return ValidationResult("error", "No api_key, scraper, or prices_data provided.", None)
 
     if isinstance(prices, dict) and 'error' in prices:
-        return (None, f"API error: {prices['error']}", None)
+        return ValidationResult("error", f"API error: {prices['error']}", None)
     if not isinstance(prices, dict):
-        return (None, f"Unexpected API response: {type(prices).__name__}", None)
+        return ValidationResult("error", f"Unexpected API response: {type(prices).__name__}", None)
 
     # 2. Check if our item exists
     market_name = format_market_hash_name(item)
@@ -88,7 +120,7 @@ def validate_item(item, api_key=None, scraper=None, prices_data=None):
             source_data = item_data.get('prices', {}).get(source, {})
             if isinstance(source_data, dict) and source_data.get('price') is not None:
                 price_info[source] = source_data['price']
-        return (True, price_info, prices)
+        return ValidationResult("found", price_info, prices)
 
     # 3. Not found — find similar items for suggestions
     similar = []
@@ -107,7 +139,7 @@ def validate_item(item, api_key=None, scraper=None, prices_data=None):
                 if len(similar) >= 5:
                     break
 
-    return (False, similar, prices)
+    return ValidationResult("not_found", similar, prices)
 
 
 def parse_suggestion_api_name(api_name):
