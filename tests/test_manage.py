@@ -4,6 +4,7 @@ import builtins
 from unittest.mock import Mock, patch, call
 
 import manage
+from utils import ValidationResult
 
 
 class TestDrainStdin:
@@ -73,9 +74,10 @@ class TestCmdAddFlow:
             'Redline',  # Skin
             'ft',       # Wear
             'n',        # StatTrak (no)
+            'n',        # Souvenir (no)
             'y',        # Confirm add
         ]
-        mock_validate.return_value = (True, {'buff163': 50.0, 'skins': 48.0}, {})
+        mock_validate.return_value = ValidationResult("found", {'buff163': 50.0, 'skins': 48.0}, {})
 
         with patch('manage.print') as mock_print:
             with patch('manage.get_all_items', return_value=[]):
@@ -107,11 +109,12 @@ class TestCmdAddFlow:
             'Redline',     # Skin
             'ft',          # Wear
             'n',           # StatTrak (no)
+            'n',           # Souvenir (no)
             'c',           # Cancel on the "not found" prompt
         ]
         # First call: item not found but has suggestions
         # (Second call from retry won't happen since we cancel)
-        mock_validate.return_value = (False, ['AK-47 | Redline (Field-Tested)'], {})
+        mock_validate.return_value = ValidationResult("not_found", ['AK-47 | Redline (Field-Tested)'], {})
 
         with patch('manage.get_all_items', return_value=[]):
             with patch('manage.save_items'):
@@ -136,14 +139,15 @@ class TestCmdAddFlow:
             'Redline',     # Skin (first attempt)
             'ft',          # Wear
             'n',           # StatTrak (no)
+            'n',           # Souvenir (no)
             'r',           # Retry
             'New Skin',    # New skin name
             'y',           # Confirm add (after found)
         ]
         # First call: not found, second call: found
         mock_validate.side_effect = [
-            (False, ['AK-47 | Redline (Field-Tested)'], {}),
-            (True, {'buff163': 50.0}, {}),
+            ValidationResult("not_found", ['AK-47 | Redline (Field-Tested)'], {}),
+            ValidationResult("found", {'buff163': 50.0}, {}),
         ]
 
         with patch('manage.print'):
