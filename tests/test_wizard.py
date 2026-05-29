@@ -4,6 +4,7 @@ import pytest
 from unittest.mock import Mock, patch
 
 import wizard
+from utils import ValidationResult
 
 
 class TestWizardValidateStep:
@@ -17,7 +18,7 @@ class TestWizardValidateStep:
         item = {"name": "AK-47 | Redline", "wear": "Field-Tested", "stattrak": False}
 
         with patch('wizard.validate_item') as mock_validate:
-            mock_validate.return_value = (True, {'buff163': 50.0}, {})
+            mock_validate.return_value = ValidationResult("found", {'buff163': 50.0}, {})
             with patch('wizard.curses.flushinp') as mock_flushinp:
                 result = wizard._wizard_validate_step(
                     stdscr, 120, 40, item, "test_key", None, None
@@ -35,7 +36,7 @@ class TestWizardValidateStep:
         item = {"name": "AK-47 | Redline", "wear": "Field-Tested", "stattrak": False}
 
         with patch('wizard.validate_item') as mock_validate:
-            mock_validate.return_value = (False, ['AK-47 | Redline (Field-Tested)'], {})
+            mock_validate.return_value = ValidationResult("not_found", ['AK-47 | Redline (Field-Tested)'], {})
             with patch('wizard.curses.flushinp') as mock_flushinp:
                 result = wizard._wizard_validate_step(
                     stdscr, 120, 40, item, "test_key", None, None
@@ -53,7 +54,7 @@ class TestWizardValidateStep:
         item = {"name": "AK-47 | Redline", "wear": "Field-Tested", "stattrak": False}
 
         with patch('wizard.validate_item') as mock_validate:
-            mock_validate.return_value = (None, "API error", None)
+            mock_validate.return_value = ValidationResult("error", "API error", None)
             with patch('wizard.curses.flushinp') as mock_flushinp:
                 result = wizard._wizard_validate_step(
                     stdscr, 120, 40, item, "test_key", None, None
@@ -71,7 +72,7 @@ class TestWizardValidateStep:
         item = {"name": "M4A1-S | Printstream", "wear": None, "stattrak": True}
 
         with patch('wizard.validate_item') as mock_validate:
-            mock_validate.return_value = (True, {'buff163': 320.50}, {})
+            mock_validate.return_value = ValidationResult("found", {'buff163': 320.50}, {})
             with patch('wizard.curses.flushinp'):
                 result = wizard._wizard_validate_step(
                     stdscr, 120, 40, item, "test_key", None, None
@@ -87,7 +88,7 @@ class TestWizardValidateStep:
         item = {"name": "AK-47 | Redline", "wear": "Field-Tested", "stattrak": False}
 
         with patch('wizard.validate_item') as mock_validate:
-            mock_validate.return_value = (False, [], {})
+            mock_validate.return_value = ValidationResult("not_found", [], {})
             with patch('wizard.curses.flushinp'):
                 result = wizard._wizard_validate_step(
                     stdscr, 120, 40, item, "test_key", None, None
@@ -103,7 +104,7 @@ class TestWizardValidateStep:
         item = {"name": "AK-47 | Redline", "wear": "Field-Tested", "stattrak": False}
 
         with patch('wizard.validate_item') as mock_validate:
-            mock_validate.return_value = (False, [], {})
+            mock_validate.return_value = ValidationResult("not_found", [], {})
             with patch('wizard.curses.flushinp'):
                 result = wizard._wizard_validate_step(
                     stdscr, 120, 40, item, "test_key", None, None
@@ -119,7 +120,7 @@ class TestWizardValidateStep:
         item = {"name": "AK-47 | Redline", "wear": "Field-Tested", "stattrak": False}
 
         with patch('wizard.validate_item') as mock_validate:
-            mock_validate.return_value = (False, [], {})
+            mock_validate.return_value = ValidationResult("not_found", [], {})
             with patch('wizard.curses.flushinp'):
                 result = wizard._wizard_validate_step(
                     stdscr, 120, 40, item, "test_key", None, None
@@ -135,7 +136,7 @@ class TestWizardValidateStep:
         item = {"name": "AK-47 | Redline", "wear": "Field-Tested", "stattrak": False}
 
         with patch('wizard.validate_item') as mock_validate:
-            mock_validate.return_value = (None, "No API key", None)
+            mock_validate.return_value = ValidationResult("error", "No API key", None)
             with patch('wizard.curses.flushinp'):
                 result = wizard._wizard_validate_step(
                     stdscr, 120, 40, item, "test_key", None, None
@@ -151,7 +152,7 @@ class TestWizardValidateStep:
         item = {"name": "Test | Item", "wear": None, "stattrak": False}
 
         with patch('wizard.validate_item') as mock_validate:
-            mock_validate.return_value = (True, {}, {})
+            mock_validate.return_value = ValidationResult("found", {}, {})
             with patch('wizard.curses.flushinp'):
                 try:
                     result = wizard._wizard_validate_step(
