@@ -148,7 +148,8 @@ def _render_table(stdscr, y_start, width, columns, rows, scroll, cursor,
         x = 2
         for col in columns:
             val_str, val_attr = col['getter'](row)
-            safe_addstr(stdscr, y, x, f"{val_str:{col['fmt']}}", row_attr | val_attr)
+            formatted = f"{val_str:{col['fmt']}}"
+            safe_addstr(stdscr, y, x, formatted[:col['width']], row_attr | val_attr)
             x += col['width'] + len(" │ ")
         safe_addstr(stdscr, y, width - 1, "║", row_attr)
         y += 1
