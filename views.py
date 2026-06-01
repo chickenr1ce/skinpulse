@@ -166,7 +166,8 @@ def render_watchlist(stdscr, y, width, items_to_track, prices,
     """Render the full watchlist table."""
     price_width = 8
     trend_width = 5
-    name_width = max(20, width - (price_width * 5 + trend_width + len(" │ ") * 6 + 4))
+    # 2 = start_x after "║ ", 7 = loop adds 3-sep after ALL 7 columns
+    name_width = max(20, width - (5 * price_width + trend_width + 7 * len(" │ ") + 2))
 
     col_headers = ["Item Name", "Buff163", "7d Avg", "30d Avg", "60d Avg", "90d Avg", "Trend"]
     arrows = [""] * 7
@@ -304,7 +305,8 @@ def render_portfolio(stdscr, y, width, portfolio, portfolio_slug, prices,
     if sort_column < len(portfolio_cols):
         portfolio_arrows[sort_column] = " ▲" if sort_ascending else " ▼"
 
-    name_w = max(15, width - (3 + 8 + 9 + 10 + 9 + 6 + len(" │ ") * 6 + 4))
+    # 2 = start_x after "║ ", 7 = loop adds 3-sep after ALL 7 columns
+    name_w = max(15, width - (3 + 8 + 9 + 10 + 9 + 6 + 7 * len(" │ ") + 2))
     columns = [
         {"header": portfolio_cols[0] + portfolio_arrows[0], "width": name_w, "fmt": f"<{name_w}",
          "getter": lambda row: (row.get("market_hash_name", ""), 0)},
