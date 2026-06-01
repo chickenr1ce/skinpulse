@@ -129,15 +129,6 @@ def draw_menu(stdscr):
         if should_refresh and not loading:
             loading = True
 
-            # Instant visual feedback (first frame; thread updates will animate)
-            spinner_char = spinner_frames[spinner_frame]
-            load_y = banner_height
-            if current_view == "portfolio" and portfolio_slug:
-                safe_addstr(stdscr, load_y, 2, f"{spinner_char} Fetching prices and portfolio...")
-            else:
-                safe_addstr(stdscr, load_y, 2, f"{spinner_char} Fetching prices from PriceEmpire...")
-            stdscr.refresh()
-
             # Start async price fetch
             price_data = None
             def _fetch_prices():
@@ -274,30 +265,20 @@ def draw_menu(stdscr):
 
         # ── WATCHLIST VIEW ──
         if current_view == "watchlist":
-            if loading:
-                y_pos = 6 if banner_height else 0
-                msg = f"{spinner_frames[spinner_frame]} Fetching prices from PriceEmpire..."
-                safe_addstr(stdscr, y_pos, 2, msg[:width-4])
-            else:
-                vs = views["watchlist"]
-                render_watchlist(stdscr, 0, width, items_to_track, prices,
-                                vs.sort_column, vs.sort_ascending, vs.scroll,
-                                vs.cursor, max_visible, banner_height,
-                                error_message)
+            vs = views["watchlist"]
+            render_watchlist(stdscr, 0, width, items_to_track, prices,
+                            vs.sort_column, vs.sort_ascending, vs.scroll,
+                            vs.cursor, max_visible, banner_height,
+                            error_message)
 
         # ── PORTFOLIO VIEW ──
         else:
-            if loading:
-                y_pos = 6 if banner_height else 0
-                msg = f"{spinner_frames[spinner_frame]} Fetching prices and portfolio..."
-                safe_addstr(stdscr, y_pos, 2, msg[:width-4])
-            else:
-                vs = views["portfolio"]
-                render_portfolio(stdscr, 0, width, portfolio, portfolio_slug,
-                                prices, vs.sort_column,
-                                vs.sort_ascending, vs.scroll,
-                                vs.cursor, max_visible, banner_height,
-                                portfolio_error)
+            vs = views["portfolio"]
+            render_portfolio(stdscr, 0, width, portfolio, portfolio_slug,
+                            prices, vs.sort_column,
+                            vs.sort_ascending, vs.scroll,
+                            vs.cursor, max_visible, banner_height,
+                            portfolio_error)
 
         # ── Refresh status (top right) ──
         if loading:
