@@ -498,7 +498,7 @@ At `MIN_WIDTH=72` with `name_width = max(20, 72 - 67) = 20`:
 | **90d Avg (w=8)** | **69** | **8** | **69-76** ← wraps at col 72! |
 | `" │ "` | | | 77-79 |
 | Trend (w=5) | 80 | 5 | 80-84 |
-| closing `║` | 72 | 1 | (width - 1 = 71) |
+| closing `║` | 71 | 1 | 71 — the ║ is drawn after the 90d cell, so chars 72-76 of the value wrap to the next row |
 
 The 90d column writes at positions 69-76, but the terminal is only 72 columns wide.
 Characters 72-76 wrap to the next row.
@@ -508,23 +508,33 @@ Characters 72-76 wrap to the next row.
 <details>
 <summary><b>Hint 3</b> — The correct overhead</summary>
 
-The data row consumes:
+The data row consumes (real written characters):
+
 ```
-start_x ("║ ")       = 2
-7 separators × 3     = 21
-5 price cols × 8     = 40
-1 trend col × 5      =  5
-name_width           = variable
-                        ───
-Total                 = name_width + 68
+start offset ("║ ")       = 2
+6 separators × 3          = 18   (the 7th x-advance is a phantom gap —
+                                   no separator is written after the last column)
+5 price cols × 8          = 40
+1 trend col × 5           =  5
+name_width                = variable
+                            ───
+Last data char (0-indexed) = 2 + name_width + 18 + 40 + 5 - 1
+                            = name_width + 64
 ```
 
-For the row to fit without wrapping: `name_width + 68 ≤ width`.
+No wrapping requires `name_width + 64 ≤ width - 1`, i.e.
+`name_width + 65 ≤ width`. With the name floor of 20, the data rows alone
+would fit at width 85.
 
-The closing `║` sits at `width - 1`, so we also need `name_width + 68 - 3 ≤ width - 1`
-(accounting for the trailing separator that isn't written), i.e., `name_width + 65 ≤ width - 1`,
-i.e., `name_width + 66 ≤ width`. With `name_width ≥ 20`, `width ≥ 86`. Rounding up for
-header text (which uses `sep.join()` with only 6 separators): `MIN_WIDTH ≥ 88`.
+But the column header is the tighter constraint. Sort arrows are appended to
+headers, and Python's string format does not truncate:
+- `"Trend ▲"` (7 chars) overflows the 5-wide trend column by 2 → the watchlist
+  header reaches `name_width + 66`, needing `name_width + 67 ≤ width`.
+- `"Qty ▲"` (6 chars) overflows the 3-wide qty column by 3 → the portfolio
+  header reaches `name_width + 67`, needing `name_width + 68 ≤ width`.
+
+With `name_width ≥ 20`, the portfolio view requires `width ≥ 88`. That is
+exactly why the fix sets `MIN_WIDTH = 88`.
 
 </details>
 
@@ -546,10 +556,10 @@ All checks must pass.
 
 | Criterion | Pass condition |
 |---|---|
-| `MIN_WIDTH` | ≥ 88 |
-| Watchlist formula | Uses 7 separators + 2, not 6 separators + 4 |
+| `MIN_WIDTH` | ≥ 88 (the portfolio header with sort arrows requires `name_w + 68 ≤ width`) |
+| Watchlist formula | Overhead evaluates to 68 (7 separators + 2), not 67 (6 separators + 4) |
 | Portfolio formula | Same correction |
-| Math explanation | Shows that at `MIN_WIDTH`, `name_width + overhead ≤ width` |
+| Math explanation | Shows that at `MIN_WIDTH`, the data rows and the widest header fit without wrapping |
 | Both views fixed | Portfolio fix mirrors watchlist fix |
 
 ### Expected changes (approximate)
@@ -559,3 +569,7 @@ The fix should be roughly 3 lines changed across 2 files:
 1. `constants/display.py`: `MIN_WIDTH = 72` → `MIN_WIDTH = 88`
 2. `views.py` watchlist formula: `len(" │ ") * 6 + 4` → `7 * len(" │ ") + 2`
 3. `views.py` portfolio formula: same change
+
+The reference commit also truncates cell text to the column width in the data
+row loop (`formatted[:col['width']]`) — a defensive extra that is **not**
+required to fix the wrapping bug.

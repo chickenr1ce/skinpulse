@@ -49,16 +49,27 @@ At `width=72`:
 - `name_width = max(20, 72 - 67) = max(20, 5) = 20`
 - Total row width: `20 + 68 = 88` — but the terminal is only **72** columns wide
 - The 90d column (positions 69-76) spills past column 72
-- `safe_addstr` silently drops characters 72-76, but curses wraps them to the
-  next row, appearing in front of the following item's name
+- With ncurses wrap mode enabled (the default), `addstr` wraps at the right
+  margin instead of erroring, so characters 72-76 land on the next row,
+  appearing in front of the following item's name. (`safe_addstr`'s
+  `try/except curses.error` only matters for the non-wrapping error case.)
 
-### Why it's hidden at larger widths
+### Why it only manifests near the minimum width
 
-At `width=200`:
-- `name_width = max(20, 200 - 67) = 133`
-- `133 + 68 = 201` — one character overflows
-- `safe_addstr` silently drops that single overflow character, so it's invisible
-- The bug is present at ALL widths, just masked by the silent error handling
+The buggy formula computes `name_width = max(20, width - 67)`. The real last
+data character is at `name_width + 64`, so the row overflows only while the
+name floor dominates:
+
+- For `width ≤ 84`: `name_width = 20` (the floor), last char at `84` — wraps
+  whenever the terminal is narrower than 85 columns.
+- For `width ≥ 85`: `name_width = width - 67 ≥ 18`, last char at
+  `width - 3` — the row always fits.
+
+So the wrapping is confined to widths **72–84** — exactly the band around the
+old `MIN_WIDTH = 72`. At large widths the row fits fine; the "201 > 200"
+accounting some analyses cite comes from counting the phantom trailing
+separator the loop advances past but never writes, which is not a real
+overflow.
 
 ## Fix
 
@@ -100,6 +111,20 @@ At the new `MIN_WIDTH = 88`:
 | 100 | 32 | 96 | 99 | No |
 | 120 | 52 | 116 | 119 | No |
 
+### Why the header (not the data row) sets the minimum at 88
+
+The data row's last character is `name_width + 64`, so rows stop wrapping at
+width 85. The binding constraint is the **column header with a sort arrow**:
+Python's string format does not truncate, so `"Trend ▲"` (7 chars) overflows
+the 5-wide trend column by 2 and `"Qty ▲"` (6 chars) overflows the 3-wide qty
+column by 3. The last header character reaches:
+
+- Watchlist: `name_width + 66` → needs `name_width + 67 ≤ width`
+- Portfolio: `name_width + 67` → needs `name_width + 68 ≤ width`
+
+With the name floor of 20, the portfolio header requires `width ≥ 88` — which
+is exactly why `MIN_WIDTH = 88` is the correct (not conservative) minimum.
+
 At width 88 with `name_width = max(20, 88 - 68) = 20`:
 - Name col: positions 2-21
 - Buff163: 25-32
@@ -110,21 +135,26 @@ At width 88 with `name_width = max(20, 88 - 68) = 20`:
 - Trend: 80-84
 - Closing ║ at 87
 
-All data fits cleanly within the 88-column terminal. The header (which uses
-`sep.join()` with 6 separators) also fits: `20 + 6*3 + 40 + 5 = 83` chars,
-starting at x=2, ending at 84, well within 88.
+All data fits cleanly within the 88-column terminal, and the widest header
+(`name_width + 67 = 87`) sits exactly at the right border.
 
 ## Acceptable variations
 
-Any fix that achieves the following is valid:
+The grader (`benchmarks/grade_001.py`) is behavioral: it evaluates whatever
+formulas are present, so any fix that achieves the following passes:
 
-1. `MIN_WIDTH ≥ 88` (or derived dynamically from the corrected overhead)
-2. Both formulas account for 7 separators (not 6)
-3. The start-offset is 2 (not 4)
-4. At MIN_WIDTH, `name_width + overhead ≤ width` and header fits
+1. `MIN_WIDTH ≥ 88` (as a literal or a constant arithmetic expression)
+2. Both width formulas subtract an overhead of **68** (7 separators + 2 start
+   offset — i.e. 5 price columns × 8, trend × 5, 7 × 3, + 2)
+3. At MIN_WIDTH, the data rows and the widest header fit without wrapping
 
-Examples of acceptable alternative approaches:
-- Computing `overhead = 2 + 7 * len(" │ ") + 5 * price_width + trend_width` as a constant
-  and using `name_width = max(20, width - overhead)` — more explicit
-- Computing MIN_WIDTH dynamically: `min_printable = MIN_NAME + 2 + 7 * 3 + 5 * 8 + 5`
-  instead of hardcoding 88
+Examples of acceptable alternative spellings (all pass the grader):
+- Reordering the terms: `width - (7 * len(" │ ") + 5 * price_width + trend_width + 2)`
+- A named overhead constant:
+  ```python
+  overhead = 2 + 7 * len(" │ ") + 5 * price_width + trend_width
+  name_width = max(20, width - overhead)
+  ```
+- Computing MIN_WIDTH dynamically:
+  `MIN_WIDTH = 20 + 2 + 7 * 3 + 5 * 8 + 5`
+- Hard-coding the overhead: `name_width = max(20, width - 68)`

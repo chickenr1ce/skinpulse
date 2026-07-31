@@ -6,209 +6,258 @@ Run from the repo root against the (hopefully fixed) codebase:
     python3 benchmarks/grade_001.py
 
 All checks must pass. Exit code 0 = all pass, 1 = one or more failures.
+
+Grading is behavioral: it evaluates the width formulas and MIN_WIDTH that are
+actually present in the code and verifies the rows fit without wrapping at
+MIN_WIDTH. It accepts any correct formulation — an inline formula, a named
+`overhead` constant, a dynamically computed MIN_WIDTH, a reordered expression,
+etc. — not just the reference spelling.
 """
 
 import ast
-import re
 import sys
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
+# Layout facts for the 7-column tables (widths of the columns after the name
+# column). Watchlist: buff(8) 7d(8) 30d(8) 60d(8) 90d(8) trend(5).
+WL_OTHERS = [8, 8, 8, 8, 8, 5]
+# Portfolio: qty(3) buy(8) now(9) total(10) pl(9) roi(6).
+PF_OTHERS = [3, 8, 9, 10, 9, 6]
 
-# ---------------------------------------------------------------------------
-# Check 1: MIN_WIDTH >= 88
-# ---------------------------------------------------------------------------
+# The render loop advances x by col_width + 3 after EVERY column (7 times), so
+# the width formulas must account for 2 (start offset after "║ ") + 7
+# separators x 3 + all column widths.
+WATCHLIST_OVERHEAD = 2 + 7 * 3 + sum(WL_OTHERS)   # 68
+PORTFOLIO_OVERHEAD = 2 + 7 * 3 + sum(PF_OTHERS)   # 68
 
-def check_min_width():
-    """Parse constants/display.py and verify MIN_WIDTH >= 88."""
-    path = REPO_ROOT / "constants" / "display.py"
-    if not path.exists():
-        return False, f"File not found: {path}"
-
-    content = path.read_text()
-    tree = ast.parse(content)
-
-    for node in ast.walk(tree):
-        if isinstance(node, ast.Assign):
-            for target in node.targets:
-                if isinstance(target, ast.Name) and target.id == "MIN_WIDTH":
-                    value = _safe_eval(node.value)
-                    if value is None:
-                        return False, "MIN_WIDTH value is not a constant literal"
-                    if value >= 88:
-                        return True, f"MIN_WIDTH = {value} >= 88"
-                    return False, f"MIN_WIDTH = {value}, but needs >= 88"
-    return False, "MIN_WIDTH not found in constants/display.py"
+# The 7th x-advance (after the last column) is a phantom gap — no separator is
+# written there — so the real last data character sits at name_w + 64.
+# The column header is the tighter constraint: a sort arrow (" ▲") overflows
+# narrow headers ("Trend ▲" = 7 chars in the 5-wide trend column; "Qty ▲" =
+# 6 chars in the 3-wide qty column), pushing the last header character to
+# name_w + 66 (watchlist) and name_w + 67 (portfolio). With the name floor of
+# 20, the portfolio header needs width >= 88 — which is why MIN_WIDTH = 88.
+WL_HEADER_OVERFLOW = 2   # "Trend ▲" (7 chars) in the 5-wide trend column
+PF_HEADER_OVERFLOW = 3   # "Qty ▲" (6 chars) in the 3-wide qty column
 
 
 # ---------------------------------------------------------------------------
-# Check 2: Watchlist formula (line ~168)
+# Safe expression evaluation
 # ---------------------------------------------------------------------------
 
-def check_watchlist_formula():
-    """Verify the watchlist name_width formula uses 7 separators + 2."""
-    path = REPO_ROOT / "views.py"
-    if not path.exists():
-        return False, f"File not found: {path}"
+def _eval_expr(node, namespace):
+    """Safely evaluate a constant arithmetic expression AST.
 
-    content = path.read_text()
-
-    # Pattern we want: 7 * len(" │ ") + 2  or  len(" │ ") * 7 + 2
-    good = re.search(
-        r"""7\s*\*\s*len\(\s*["']\s*│\s*["']\s*\)\s*\+\s*2|"""
-        r"""len\(\s*["']\s*│\s*["']\s*\)\s*\*\s*7\s*\+\s*2""",
-        content,
-    )
-    if good:
-        return True, "Watchlist formula uses 7 separators + 2"
-
-    # Pattern we don't want: len(" │ ") * 6 + 4
-    bad = re.search(r"""len\(\s*["']\s*│\s*["']\s*\)\s*\*\s*6\s*\+\s*4""", content)
-    if bad:
-        return False, "Watchlist formula still uses old pattern (6 separators + 4)"
-
-    return False, "Watchlist formula: unrecognized pattern (neither 7+2 nor 6+4 found)"
-
-
-# ---------------------------------------------------------------------------
-# Check 3: Portfolio formula (line ~306)
-# ---------------------------------------------------------------------------
-
-def check_portfolio_formula():
-    """Verify the portfolio name_w formula uses 7 separators + 2."""
-    path = REPO_ROOT / "views.py"
-    if not path.exists():
-        return False, f"File not found: {path}"
-
-    content = path.read_text()
-
-    # Same patterns, but look near "name_w = max(15"
-    # Find the portfolio formula block
-    m = re.search(r"name_w\s*=\s*max\(15,\s*width\s*-\s*\((.+)\)", content)
-    if not m:
-        return False, "Portfolio formula (name_w = max(...)) not found"
-
-    formula_body = m.group(1)
-
-    good = re.search(
-        r"""7\s*\*\s*len\(\s*["']\s*│\s*["']\s*\)\s*\+\s*2|"""
-        r"""len\(\s*["']\s*│\s*["']\s*\)\s*\*\s*7\s*\+\s*2""",
-        formula_body,
-    )
-    if good:
-        return True, "Portfolio formula uses 7 separators + 2"
-
-    bad = re.search(r"""len\(\s*["']\s*│\s*["']\s*\)\s*\*\s*6\s*\+\s*4""", formula_body)
-    if bad:
-        return False, "Portfolio formula still uses old pattern (6 separators + 4)"
-
-    return False, "Portfolio formula: unrecognized pattern (neither 7+2 nor 6+4 found)"
-
-
-# ---------------------------------------------------------------------------
-# Check 4: Math verification
-# ---------------------------------------------------------------------------
-
-def check_math_verification():
-    """At MIN_WIDTH, verify name_width + overhead <= width for both views.
-
-    This is a soft check — validates that whichever formula is present,
-    it produces a name_width that fits at the declared MIN_WIDTH.
+    Supports numeric literals, + - * / // %, unary +/-, Name lookups in
+    `namespace`, and len("...") calls. Returns None on anything unsupported
+    (no arbitrary code execution).
     """
-    display_content = (REPO_ROOT / "constants" / "display.py").read_text()
-    tree = ast.parse(display_content)
-    min_width = None
+    if isinstance(node, ast.Constant):
+        if isinstance(node.value, (int, float)):
+            return node.value
+        if isinstance(node.value, str):
+            return node.value
+        return None
+    if isinstance(node, ast.Name):
+        return namespace.get(node.id)
+    if isinstance(node, ast.UnaryOp):
+        v = _eval_expr(node.operand, namespace)
+        if v is None:
+            return None
+        if isinstance(node.op, ast.UAdd):
+            return v
+        if isinstance(node.op, ast.USub):
+            return -v
+        return None
+    if isinstance(node, ast.BinOp):
+        left = _eval_expr(node.left, namespace)
+        right = _eval_expr(node.right, namespace)
+        if left is None or right is None:
+            return None
+        if isinstance(node.op, ast.Add):
+            return left + right
+        if isinstance(node.op, ast.Sub):
+            return left - right
+        if isinstance(node.op, ast.Mult):
+            return left * right
+        if isinstance(node.op, ast.Div):
+            return None if right == 0 else left / right
+        if isinstance(node.op, ast.FloorDiv):
+            return None if right == 0 else left // right
+        if isinstance(node.op, ast.Mod):
+            return None if right == 0 else left % right
+        return None
+    if isinstance(node, ast.Call):
+        if (isinstance(node.func, ast.Name) and node.func.id == "len"
+                and len(node.args) == 1):
+            arg = _eval_expr(node.args[0], namespace)
+            if isinstance(arg, str):
+                return len(arg)
+        return None
+    return None
+
+
+def _build_namespace(tree):
+    """Collect all `name = constant-expr` assignments, evaluated in source
+    order, so later expressions can reference earlier ones (e.g. `overhead`)."""
+    ns = {"price_width": 8, "trend_width": 5}  # render constants
+    assigns = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Assign) and node.lineno is not None:
+            for t in node.targets:
+                if isinstance(t, ast.Name):
+                    assigns.append((node.lineno, t.id, node.value))
+    assigns.sort(key=lambda x: x[0])
+    for _, name, value in assigns:
+        val = _eval_expr(value, ns)
+        if val is not None:
+            ns[name] = val
+    return ns
+
+
+def _find_formula(tree, target, ns):
+    """Return (floor, overhead) for `target = max(floor, width - X)`.
+
+    X may be an inline arithmetic expression or a Name resolved through the
+    file's assignments (e.g. an `overhead` constant). Returns (None, None)
+    if not found or not evaluable.
+    """
     for node in ast.walk(tree):
         if isinstance(node, ast.Assign):
-            for target in node.targets:
-                if isinstance(target, ast.Name) and target.id == "MIN_WIDTH":
-                    min_width = _safe_eval(node.value)
+            for t in node.targets:
+                if isinstance(t, ast.Name) and t.id == target:
+                    value = node.value
+                    if (isinstance(value, ast.Call) and len(value.args) >= 2
+                            and isinstance(value.args[1], ast.BinOp)
+                            and isinstance(value.args[1].op, ast.Sub)):
+                        floor = _eval_expr(value.args[0], ns)
+                        overhead = _eval_expr(value.args[1].right, ns)
+                        return floor, overhead
+    return None, None
 
+
+def _load_state():
+    """Parse constants/display.py and views.py once and extract what the
+    checks need. Never raises; missing/unparseable inputs yield None values."""
+    state = {
+        "min_width": None,
+        "watchlist": (None, None),
+        "portfolio": (None, None),
+    }
+    display_path = REPO_ROOT / "constants" / "display.py"
+    if display_path.exists():
+        try:
+            tree = ast.parse(display_path.read_text())
+            ns = _build_namespace(tree)
+            for node in ast.walk(tree):
+                if isinstance(node, ast.Assign):
+                    for t in node.targets:
+                        if isinstance(t, ast.Name) and t.id == "MIN_WIDTH":
+                            state["min_width"] = _eval_expr(node.value, ns)
+        except SyntaxError:
+            pass
+    views_path = REPO_ROOT / "views.py"
+    if views_path.exists():
+        try:
+            tree = ast.parse(views_path.read_text())
+            ns = _build_namespace(tree)
+            state["watchlist"] = _find_formula(tree, "name_width", ns)
+            state["portfolio"] = _find_formula(tree, "name_w", ns)
+        except SyntaxError:
+            pass
+    return state
+
+
+# ---------------------------------------------------------------------------
+# Checks
+# ---------------------------------------------------------------------------
+
+def check_min_width(state):
+    """MIN_WIDTH must be a numeric constant (or constant arithmetic) >= 88.
+
+    88 is the exact minimum: with the name floor of 20 and the corrected
+    overhead of 68, the portfolio header with a sort arrow ("Qty ▲" overflows
+    its 3-wide column by 3) reaches name_w + 67 = 87, which needs width >= 88.
+    """
+    min_width = state["min_width"]
     if min_width is None:
-        return False, "Cannot verify math: MIN_WIDTH not found"
+        return False, ("MIN_WIDTH not found in constants/display.py or is not "
+                       "a constant/arithmetic literal")
+    if min_width < 88:
+        return False, (f"MIN_WIDTH = {min_width}, but needs >= 88 (the header "
+                       "with sort arrows needs name_w + 68 <= width)")
+    return True, f"MIN_WIDTH = {min_width} >= 88"
 
-    # Compute overhead from the formulas using regex extraction
-    views_content = (REPO_ROOT / "views.py").read_text()
 
-    # Extract watchlist formula
-    wl_match = re.search(
-        r"name_width\s*=\s*max\(\s*20\s*,\s*width\s*-\s*\((.+)\)",
-        views_content,
-    )
-    pf_match = re.search(
-        r"name_w\s*=\s*max\(\s*15\s*,\s*width\s*-\s*\((.+)\)",
-        views_content,
-    )
+def _check_formula(state, view_name, target, expected, label):
+    floor, overhead = state[view_name]
+    if overhead is None:
+        return False, (f"{label} formula ({target} = max(floor, width - ...)) "
+                       "not found or not evaluable")
+    if overhead == expected:
+        return True, (f"{label} formula overhead evaluates to {overhead} "
+                      "(7 separators + 2, start offset 2)")
+    if overhead == 67:
+        return False, (f"{label} formula overhead = {overhead} — still the old "
+                       f"pattern (6 separators + 4); needs {expected}")
+    return False, (f"{label} formula overhead = {overhead}, needs {expected} "
+                   "(7 separators + 2, start offset 2)")
 
-    overheads = {}
 
-    if wl_match:
-        expr = wl_match.group(1).strip()
-        val = _eval_overhead(expr)
-        if val is not None:
-            overheads["watchlist"] = val
+def check_watchlist_formula(state):
+    return _check_formula(state, "watchlist", "name_width", WATCHLIST_OVERHEAD,
+                          "Watchlist")
 
-    if pf_match:
-        expr = pf_match.group(1).strip()
-        val = _eval_overhead(expr)
-        if val is not None:
-            overheads["portfolio"] = val
 
-    if not overheads:
-        return False, "Cannot verify math: could not parse either formula"
+def check_portfolio_formula(state):
+    return _check_formula(state, "portfolio", "name_w", PORTFOLIO_OVERHEAD,
+                          "Portfolio")
 
+
+def check_math_verification(state):
+    """At MIN_WIDTH, verify the data rows AND the column header (with sort
+    arrow) fit without wrapping for both views."""
+    min_width = state["min_width"]
+    if min_width is None:
+        return False, "Cannot verify math: MIN_WIDTH not found or not numeric"
+
+    views = [
+        ("watchlist", state["watchlist"], WL_OTHERS, WL_HEADER_OVERFLOW, 20),
+        ("portfolio", state["portfolio"], PF_OTHERS, PF_HEADER_OVERFLOW, 15),
+    ]
     results = []
-    for view_name, overhead in overheads.items():
-        name_floor = 20 if view_name == "watchlist" else 15
-        name_w = max(name_floor, min_width - overhead)
-        total = name_w + overhead
-        fits = total <= min_width
+    for view_name, (floor, overhead), others, header_overflow, default_floor in views:
+        if overhead is None:
+            results.append(f"{view_name}: formula not evaluable — skipped")
+            continue
+        floor_used = floor if isinstance(floor, (int, float)) else default_floor
+        name_w = max(floor_used, min_width - overhead)
+        data_last = _data_last(name_w, others)
+        header_last = _header_last(name_w, others, header_overflow)
+        border = min_width - 1
+        data_fits = data_last <= border
+        header_fits = header_last <= border
+        fits = data_fits and header_fits
         results.append(
             f"{view_name}: overhead={overhead}, name_w={name_w}, "
-            f"total={total}, fits={fits} (MIN_WIDTH={min_width})"
+            f"data_last={data_last}, header_last={header_last}, "
+            f"border={border}, fits={fits} (MIN_WIDTH={min_width})"
         )
         if not fits:
             return False, "; ".join(results)
-
     return True, "; ".join(results)
 
 
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
-def _safe_eval(node):
-    """Safely evaluate a constant AST node. Returns the value or None."""
-    try:
-        return ast.literal_eval(node)
-    except (ValueError, TypeError, SyntaxError):
-        return None
+def _data_last(name_w, others):
+    """Last written data character (0-indexed) for a 7-column table."""
+    return 2 + name_w + 6 * 3 + sum(others) - 1
 
 
-def _eval_overhead(expr_str):
-    """Naively evaluate an arithmetic expression like '5*8 + 5 + 7*3 + 2'.
-
-    Only handles +, *, literal integers. Falls back to None on complexity.
-    This is safe: no exec/eval of arbitrary code.
-    """
-    try:
-        # Strip trailing ) — the regex capture may include the formula's
-        # closing paren because of the adjoining max() paren.
-        expr_str = expr_str.strip().rstrip(")")
-        # Normalize: replace len(" │ ") with its known value = 3
-        expr = re.sub(r'len\(\s*["\']\s*│\s*["\']\s*\)', "3", expr_str)
-        # Also handle price_width and trend_width:
-        expr = re.sub(r'\bprice_width\b', "8", expr)
-        expr = re.sub(r'\btrend_width\b', "5", expr)
-        # Only allow digits, whitespace, +, *, (, )
-        if not re.match(r'^[\d\s\+\*\(\)]+$', expr):
-            return None
-        # Use Python's evaluator on this sanitized arithmetic
-        code = compile(expr, "<overhead>", "eval")
-        return eval(code, {"__builtins__": {}})
-    except Exception:
-        return None
+def _header_last(name_w, others, overflow):
+    """Last header character including the sort-arrow overflow."""
+    return _data_last(name_w, others) + overflow
 
 
 # ---------------------------------------------------------------------------
@@ -216,11 +265,12 @@ def _eval_overhead(expr_str):
 # ---------------------------------------------------------------------------
 
 def main():
+    state = _load_state()
     checks = [
-        ("MIN_WIDTH >= 88",      check_min_width),
-        ("Watchlist formula",     check_watchlist_formula),
-        ("Portfolio formula",     check_portfolio_formula),
-        ("Math verification",     check_math_verification),
+        ("MIN_WIDTH >= 88",   lambda: check_min_width(state)),
+        ("Watchlist formula", lambda: check_watchlist_formula(state)),
+        ("Portfolio formula", lambda: check_portfolio_formula(state)),
+        ("Math verification", lambda: check_math_verification(state)),
     ]
 
     print(f"Benchmark 001 — Grading against {REPO_ROOT}")
