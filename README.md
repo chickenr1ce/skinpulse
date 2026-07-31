@@ -6,6 +6,7 @@ A terminal-based tool to track real-time skin prices across multiple marketplace
 
 *   **Python 3.x**: Ensure you have Python 3 installed on your system.
 *   **PriceEmpire API Key**: You need a valid API key from [PriceEmpire](https://pricempire.com/api).
+*   **Windows**: The TUI needs the `curses` module, which is **not** included with Python on Windows. Install the `windows-curses` package (see [Running on Windows](#running-on-windows)).
 
 ## Installation
 
@@ -24,6 +25,13 @@ A terminal-based tool to track real-time skin prices across multiple marketplace
     ```bash
     pip install requests
     ```
+
+    **Windows only**: the TUI also needs `curses`, which isn't bundled with
+    Python on Windows. Install it together with `requests`:
+    ```bash
+    python -m pip install requests windows-curses
+    ```
+    (On Windows, use `python` or `py` instead of `python3`.)
 
 ## Adding Items
 
@@ -111,7 +119,58 @@ Example `config.json`:
     *   **PgDn / PgUp**: Scroll full-page down/up.
     *   **g / G**: Jump to top / bottom of list.
 
+## Running on Windows
+
+The TUI is built on Python's `curses` library, which is **not** included with
+Python on Windows. Without it, `tui.py` fails immediately with:
+
+```
+ModuleNotFoundError: No module named 'curses'
+```
+
+1.  **Install dependencies** (in the project folder):
+    ```powershell
+    python -m pip install requests windows-curses
+    ```
+    `windows-curses` provides the missing `curses` module. Only the TUI
+    (`tui.py`) needs it — `manage.py` works fine without it.
+
+2.  **Run the TUI**:
+    ```powershell
+    python tui.py
+    ```
+    If `python` isn't recognized, try `py tui.py` (the Python launcher) or use
+    a Python 3.x installation with "Add to PATH" enabled.
+
+3.  **Use a modern terminal**: Windows Terminal (available from the Microsoft
+    Store) or the Windows 11 terminal work best. Legacy `cmd.exe`/conhost can
+    render curses apps poorly (missing colors, flickering, resize bugs).
+
+All other commands work the same way — just replace `python3` with `python`:
+
+```powershell
+python manage.py add
+python manage.py list
+python manage.py remove 2
+```
+
+**Tip:** add these to your PowerShell profile to launch from anywhere
+(open it with `notepad $PROFILE`):
+
+```powershell
+function skinpulse { Set-Location "C:\path\to\skinpulse"; python tui.py }
+function skinpulse-manage { Set-Location "C:\path\to\skinpulse"; python manage.py @args }
+```
+
+Then type `skinpulse` or `skinpulse-manage add` from any directory. Note that
+PowerShell functions run in your current session, so the working directory
+stays changed after the call.
+
 ## Troubleshooting
+
+*   **`ModuleNotFoundError: No module named 'curses'` (Windows)**: Python on
+    Windows doesn't ship the `curses` module. Fix it with
+    `python -m pip install windows-curses` (see [Running on Windows](#running-on-windows)).
 
 *   **API status 403**: This means your API key is invalid or you are accessing an endpoint not covered by your plan. Ensure you have the **Trader (Free)** plan or higher.
 *   **API status 429**: Rate limit exceeded. The app is configured to auto-refresh every 5 minutes to stay within free tier limits.
