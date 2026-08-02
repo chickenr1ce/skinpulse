@@ -39,7 +39,7 @@ def draw_menu(stdscr):
     stdscr.timeout(100)
 
     config_data = load_config()
-    api_key = config_data.get("api_key", "YOUR_API_KEY")
+    api_key = config_data.get("api_key", "")
     portfolio_slug = config_data.get("portfolio_slug", "")
 
     items_mtime = get_items_mtime()
@@ -50,7 +50,9 @@ def draw_menu(stdscr):
     last_update = 0
     prices = {}
     loading = False
-    error_message = ""
+    error_message = "" if api_key else (
+        "No API key in config.json — copy config.json.example to config.json"
+    )
     views = {
         "watchlist": ViewState(sort_column=1),
         "portfolio": ViewState(),
@@ -125,7 +127,7 @@ def draw_menu(stdscr):
         elif current_time - last_update > REFRESH_INTERVAL:
             should_refresh = True
 
-        if should_refresh and not loading:
+        if should_refresh and not loading and api_key:
             loading = True
 
             # Start async price fetch
