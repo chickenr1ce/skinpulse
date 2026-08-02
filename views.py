@@ -106,7 +106,9 @@ def _render_table(stdscr, y_start, width, columns, rows, scroll, cursor,
     if error_message:
         safe_addstr(stdscr, banner_height, 2, f"Error: {error_message[:width - 10]}", curses.A_BOLD)
 
-    y = (BANNER_HEIGHT if banner_height else 0) + header_rows
+    # The error banner occupies banner_height, so the table starts one row
+    # below it — otherwise the top border overwrites the banner text.
+    y = (BANNER_HEIGHT if banner_height else 0) + header_rows + (1 if error_message else 0)
     # ── Top border ──
     safe_addstr(stdscr, y, 0, "╔" + "═" * (width - 2) + "╗")
     y += 1

@@ -55,6 +55,12 @@ class PriceEmpireScraper:
 
                 # If API returns a dict, normalize internal prices structure
                 if isinstance(data, dict):
+                    # The v4 API answers some auth/usage errors with HTTP 200
+                    # and a body like {"status": false, "message": "..."}.
+                    # Never treat that as a prices dict, or every watchlist
+                    # row silently renders 0.00 with no error banner.
+                    if data.get("status") is False:
+                        return {"error": data.get("message") or f"API status {response.status_code}"}
                     for name, item in data.items():
                         if isinstance(item, dict):
                             self._mutate_prices_to_dict(item)
