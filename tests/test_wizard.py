@@ -26,7 +26,7 @@ class TestWizardValidateStep:
 
         mock_flushinp.assert_called_once()
         mock_validate.assert_called_once()
-        assert result == item, f"Expected {item}, got {result}"
+        assert result == (item, "ok"), f"Expected {(item, 'ok')}, got {result}"
 
     def test_flushinp_called_not_found_path(self):
         """flushinp should also be called in the 'not found' path."""
@@ -78,7 +78,7 @@ class TestWizardValidateStep:
                     stdscr, 120, 40, item, "test_key", None, None
                 )
 
-        assert result == item
+        assert result == (item, "ok")
 
     def test_not_found_proceed_returns_item(self):
         """When not found but user chooses to proceed, return the original item."""
@@ -94,10 +94,10 @@ class TestWizardValidateStep:
                     stdscr, 120, 40, item, "test_key", None, None
                 )
 
-        assert result == item
+        assert result == (item, "ok")
 
-    def test_not_found_retry_returns_retry_string(self):
-        """When not found and user picks retry, return 'RETRY'."""
+    def test_not_found_retry_returns_retry_status(self):
+        """When not found and user picks retry, return (item, 'retry')."""
         stdscr = Mock()
         stdscr.getmaxyx.return_value = (40, 120)
         stdscr.getch.side_effect = [ord('r')]  # Retry
@@ -110,7 +110,7 @@ class TestWizardValidateStep:
                     stdscr, 120, 40, item, "test_key", None, None
                 )
 
-        assert result == "RETRY"
+        assert result == (item, "retry")
 
     def test_not_found_cancel_returns_none(self):
         """When not found and user cancels, return None."""
@@ -142,7 +142,7 @@ class TestWizardValidateStep:
                     stdscr, 120, 40, item, "test_key", None, None
                 )
 
-        assert result == item
+        assert result == (item, "ok")
 
     def test_no_crash_without_curses_terminal(self):
         """Function should not crash when called with Mock stdscr (no real terminal)."""
@@ -158,13 +158,13 @@ class TestWizardValidateStep:
                     result = wizard._wizard_validate_step(
                         stdscr, 120, 40, item, None, None, None
                     )
-                    assert result == item
+                    assert result == (item, "ok")
                 except Exception as e:
                     pytest.fail(f"Unexpected exception: {e}")
 
 
-class TestWizardRowFix:
-    """Verify the row/r variable fix — no NameErrors from undefined 'r'."""
+class TestWizardDrawingHelpers:
+    """Behavioral tests for the wizard drawing helpers."""
 
     def test_draw_centered_box_no_nameerror(self):
         """draw_centered_box should not crash with NameError for 'r'."""
@@ -173,17 +173,22 @@ class TestWizardRowFix:
         wizard.draw_centered_box(stdscr, 0, 0, 5, 20)
         # If we reach here, no NameError occurred
 
-    def test_wizard_functions_use_row_not_r(self):
-        """Verify _wizard_validate_step no longer references undefined 'r'."""
-        import inspect
-        import re
-        src = inspect.getsource(wizard._wizard_validate_step)
-        # Search for 'for row in range' blocks — the body should use 'row', not 'r'
-        lines = src.split('\n')
-        for i, line in enumerate(lines):
-            if 'for row in range(' in line:
-                # Check the next line for box_y + r (with word boundary so 'row' doesn't match)
-                if i + 1 < len(lines):
-                    next_line = lines[i + 1]
-                    assert not re.search(r'box_y\s*\+\s*r\b', next_line), \
-                        f"Bug found in _wizard_validate_step at line {i+2}: {next_line}"
+    def test_wizard_yes_no_returns_bool(self):
+        """_wizard_yes_no returns True for 'y' and False for Enter/'n'/Esc."""
+        for ch in (ord('y'), ord('Y')):
+            stdscr = Mock()
+            stdscr.getch.side_effect = [ch]
+            assert wizard._wizard_yes_no(stdscr, 0, 0, 20, "Prompt? (y/N): ") is True
+        for ch in (10, 13, ord('n'), ord('N'), 27):
+            stdscr = Mock()
+            stdscr.getch.side_effect = [ch]
+            assert wizard._wizard_yes_no(stdscr, 0, 0, 20, "Prompt? (y/N): ") is False
+
+    def test_wizard_prompt_box_draws_title(self):
+        """_wizard_prompt_box clears the box and writes the title at box_y+1."""
+        stdscr = Mock()
+        title = "Item: AK-47 | Redline"
+        wizard._wizard_prompt_box(stdscr, 5, 10, 5, 40, title)
+        draws = [c.args for c in stdscr.addstr.call_args_list
+                 if c.args and c.args[0] == 6 and c.args[1] == 12 and c.args[2] == title]
+        assert draws, "title not drawn at (box_y+1, box_x+2)"

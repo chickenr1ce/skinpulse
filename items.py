@@ -19,7 +19,7 @@ def _normalize(s):
     return re.sub(r'[\s\-]+', '', s).lower()
 
 
-def _capitalize_skin(s):
+def capitalize_skin(s):
     """Title-case a skin name without capitalizing after apostrophes.
 
     'ramese's reach' → 'Ramese's Reach'  (not 'Ramese'S Reach')
@@ -63,7 +63,7 @@ def split_name(raw):
             weapon_part = weapon_part.strip()
             skin_part = skin_part.strip() or None
             if skin_part:
-                skin_part = _capitalize_skin(skin_part)
+                skin_part = capitalize_skin(skin_part)
             for weapon in WEAPONS:
                 if _normalize(weapon_part) == _normalize(weapon):
                     return (weapon, skin_part)
@@ -83,7 +83,7 @@ def split_name(raw):
         pattern = rf'({re.escape(weapon)})\s*(?:\||\s|-)\s*(.+)'
         m = re.match(pattern, raw, re.IGNORECASE)
         if m:
-            return (weapon, _capitalize_skin(m.group(2)))
+            return (weapon, capitalize_skin(m.group(2)))
 
         # Normalized prefix match (handles "ak47 redline", "m4a1s printstream")
         if raw_norm.startswith(weapon_norm) and len(raw_norm) > len(weapon_norm):
@@ -98,7 +98,7 @@ def split_name(raw):
             rest = raw[pos:].strip()
             rest = re.sub(r'^[\s\-|]+', '', rest).strip()
             if rest:
-                return (weapon, _capitalize_skin(rest))
+                return (weapon, capitalize_skin(rest))
 
     return (raw, None)
 
@@ -176,7 +176,7 @@ def format_item_line(item):
 def load_items(path=ITEMS_FILE):
     items = []
     try:
-        with open(path, 'r') as f:
+        with open(path, 'r', encoding='utf-8') as f:
             for line in f:
                 item = parse_item_line(line)
                 if item:
@@ -187,7 +187,7 @@ def load_items(path=ITEMS_FILE):
 
 
 def save_items(items, path=ITEMS_FILE):
-    with open(path, 'w') as f:
+    with open(path, 'w', encoding='utf-8') as f:
         for item in items:
             f.write(format_item_line(item) + '\n')
 
