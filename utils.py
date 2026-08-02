@@ -17,14 +17,14 @@ CONFIG_FILE = 'config.json'
 
 def load_config():
     try:
-        with open(CONFIG_FILE, 'r') as f:
+        with open(CONFIG_FILE, 'r', encoding='utf-8') as f:
             return json.load(f)
     except FileNotFoundError:
         return {}
 
 
 def save_config(config):
-    with open(CONFIG_FILE, 'w') as f:
+    with open(CONFIG_FILE, 'w', encoding='utf-8') as f:
         json.dump(config, f, indent=4)
 
 
@@ -79,6 +79,16 @@ class ValidationResult:
     prices: dict | None
 
 
+def _extract_price_info(item_data):
+    """Extract {source: price} from an item's prices dict, skipping missing prices."""
+    price_info = {}
+    for source in ('buff163', 'skins'):
+        source_data = item_data.get('prices', {}).get(source, {})
+        if isinstance(source_data, dict) and source_data.get('price') is not None:
+            price_info[source] = source_data['price']
+    return price_info
+
+
 def validate_item(item, api_key=None, scraper=None, prices_data=None):
     """Check if the item exists in the PriceEmpire API.
 
@@ -115,12 +125,7 @@ def validate_item(item, api_key=None, scraper=None, prices_data=None):
     market_name = format_market_hash_name(item)
     if market_name in prices:
         item_data = prices[market_name]
-        price_info = {}
-        for source in ('buff163', 'skins'):
-            source_data = item_data.get('prices', {}).get(source, {})
-            if isinstance(source_data, dict) and source_data.get('price') is not None:
-                price_info[source] = source_data['price']
-        return ValidationResult("found", price_info, prices)
+        return ValidationResult("found", _extract_price_info(item_data), prices)
 
     # 3. Not found — find similar items for suggestions
     similar = []
@@ -197,9 +202,4 @@ def apply_suggestion(similar, idx, prices_data, stattrak=False, souvenir=False):
     parsed['stattrak'] = stattrak
     parsed['souvenir'] = souvenir
     item_data = prices_data.get(api_name, {})
-    price_info = {}
-    for source in ('buff163', 'skins'):
-        src_data = item_data.get('prices', {}).get(source, {})
-        if isinstance(src_data, dict) and src_data.get('price') is not None:
-            price_info[source] = src_data['price']
-    return (parsed, price_info)
+    return (parsed, _extract_price_info(item_data))

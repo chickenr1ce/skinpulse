@@ -1,7 +1,7 @@
 """Tests for manage.py: input buffer drain fix and API validation progress."""
 
 import builtins
-from unittest.mock import Mock, patch, call
+from unittest.mock import patch
 
 import manage
 from utils import ValidationResult

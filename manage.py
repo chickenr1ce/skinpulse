@@ -2,9 +2,8 @@
 import sys
 from items import (
     load_items, save_items, format_item_line, format_market_hash_name,
-    WEAPONS, find_weapon, split_name, _capitalize_skin, normalize_wear,
+    WEAPONS, find_weapon, split_name, capitalize_skin, normalize_wear,
 )
-from price_empire_scraper import PriceEmpireScraper
 from utils import validate_item, load_config, apply_suggestion, ValidationResult, SuggestionAction, resolve_suggestion_choice
 
 
@@ -49,6 +48,15 @@ def cmd_list():
         return
     for i, item in enumerate(items):
         print(f"{i}: {format_item_line(item)}")
+
+
+def _print_not_found(item, similar):
+    """Print the 'not found' warning and numbered suggestions."""
+    print(f"\n  ⚠  '{format_market_hash_name(item)}' not found in API.")
+    if similar:
+        print("  Did you mean one of these?")
+        for i, s in enumerate(similar):
+            print(f"    {i + 1}) {s}")
 
 
 def _select_weapon():
@@ -130,7 +138,7 @@ def cmd_add():
         if not skin:
             print("Cancelled.")
             return
-        skin = _capitalize_skin(skin)
+        skin = capitalize_skin(skin)
 
     name = f"{weapon} | {skin}"
 
@@ -176,11 +184,7 @@ def cmd_add():
         # status == "not_found"
         similar = validation.data
         prices_data = validation.prices
-        print(f"\n  ⚠  '{format_market_hash_name(item)}' not found in API.")
-        if similar:
-            print("  Did you mean one of these?")
-            for i, s in enumerate(similar):
-                print(f"    {i + 1}) {s}")
+        _print_not_found(item, similar)
 
         print()
         choice = _safe_input(
@@ -203,7 +207,7 @@ def cmd_add():
             if not skin:
                 print("Cancelled.")
                 return
-            skin = _capitalize_skin(skin)
+            skin = capitalize_skin(skin)
             name = f"{weapon} | {skin}"
             item = {"name": name, "wear": wear, "stattrak": stattrak, "souvenir": souvenir}
             line = format_item_line(item)
@@ -214,17 +218,13 @@ def cmd_add():
 
         if action == SuggestionAction.PICK and idx is not None:
             item, result = apply_suggestion(similar, idx, prices_data, stattrak, souvenir)
+            line = format_item_line(item)
             validation = ValidationResult("found", result, prices_data)
             continue
 
         print("  Invalid choice.")
         # Re-display suggestions
-        similar = validation.data
-        print(f"\n  ⚠  '{format_market_hash_name(item)}' not found in API.")
-        if similar:
-            print("  Did you mean one of these?")
-            for i, s in enumerate(similar):
-                print(f"    {i + 1}) {s}")
+        _print_not_found(item, validation.data)
 
     # Step 6: Final confirmation
     if found:

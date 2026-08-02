@@ -7,6 +7,7 @@ to keep the main loop focused on orchestration.
 import curses
 from items import format_market_hash_name
 from curses_utils import safe_addstr
+from constants.display import BANNER_HEIGHT
 
 
 
@@ -100,12 +101,12 @@ def _render_table(stdscr, y_start, width, columns, rows, scroll, cursor,
         render_header_cells: callable(stdscr, y, x) to draw the custom header cells,
                              or None. Called for each header row 0..header_rows-1.
     Returns:
-        (y_after, clamped_scroll, clamped_cursor)
+        y_after — the row after the bottom border.
     """
     if error_message:
         safe_addstr(stdscr, banner_height, 2, f"Error: {error_message[:width - 10]}", curses.A_BOLD)
 
-    y = (6 if banner_height else 0) + header_rows
+    y = (BANNER_HEIGHT if banner_height else 0) + header_rows
     # ── Top border ──
     safe_addstr(stdscr, y, 0, "╔" + "═" * (width - 2) + "╗")
     y += 1
@@ -157,7 +158,7 @@ def _render_table(stdscr, y_start, width, columns, rows, scroll, cursor,
     # ── Bottom border ──
     safe_addstr(stdscr, y, 0, "╚" + "═" * (width - 2) + "╝")
 
-    return y, scroll, cursor
+    return y
 
 
 def render_watchlist(stdscr, y, width, items_to_track, prices,
@@ -195,8 +196,8 @@ def render_watchlist(stdscr, y, width, items_to_track, prices,
                          key=lambda i: get_sort_value(i, prices, sort_column),
                          reverse=not sort_ascending)
 
-    return _render_table(stdscr, y, width, columns, sorted_rows, scroll, cursor,
-                         max_visible, banner_height, error_message)
+    _render_table(stdscr, y, width, columns, sorted_rows, scroll, cursor,
+                  max_visible, banner_height, error_message)
 
 
 def _row_buff_price(row, prices):
@@ -273,10 +274,7 @@ def render_portfolio(stdscr, y, width, portfolio, portfolio_slug, prices,
                      sort_column, sort_ascending, scroll, cursor,
                      max_visible, banner_height, portfolio_error):
     """Render the full portfolio table."""
-    if portfolio_error:
-        safe_addstr(stdscr, banner_height, 2, f"Portfolio error: {portfolio_error[:width - 20]}", curses.A_BOLD)
-
-    y_after = 6 if banner_height else 0
+    y_after = BANNER_HEIGHT if banner_height else 0
 
     if not portfolio:
         safe_addstr(stdscr, y_after, 0, "╔" + "═" * (width - 2) + "╗")
@@ -284,7 +282,7 @@ def render_portfolio(stdscr, y, width, portfolio, portfolio_slug, prices,
         safe_addstr(stdscr, y_after + 1, 2, "No portfolio data loaded. Press 'r' to refresh.")
         safe_addstr(stdscr, y_after + 1, width - 1, "║")
         safe_addstr(stdscr, y_after + 2, 0, "╚" + "═" * (width - 2) + "╝")
-        return y_after + 2, scroll, cursor
+        return
 
     portfolio_info = portfolio.get("portfolio", {})
     portfolio_name = portfolio_info.get("name", portfolio_slug)[:18]
@@ -328,9 +326,9 @@ def render_portfolio(stdscr, y, width, portfolio, portfolio_slug, prices,
                          key=lambda i: get_portfolio_sort_value(i, prices, sort_column),
                          reverse=not sort_ascending)
 
-    return _render_table(stdscr, y, width, columns, sorted_rows, scroll, cursor,
-                         max_visible, banner_height, portfolio_error,
-                         header_rows=1, render_header_cells=_render_portfolio_header)
+    _render_table(stdscr, y, width, columns, sorted_rows, scroll, cursor,
+                  max_visible, banner_height, portfolio_error,
+                  header_rows=1, render_header_cells=_render_portfolio_header)
 
 
 # ── Portfolio helper accessors ──
