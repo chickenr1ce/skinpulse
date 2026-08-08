@@ -22,8 +22,9 @@ def _normalize(s):
 def capitalize_skin(s):
     """Title-case a skin name without capitalizing after apostrophes.
 
-    'ramese's reach' → 'Ramese's Reach'  (not 'Ramese'S Reach')
-    'neo-noir'       → 'Neo-Noir'
+    'rameses reach' → 'Rameses Reach'
+    'rameses's reach' → 'Rameses's Reach'  (not 'Rameses'S Reach')
+    'neo-noir' → 'Neo-Noir'
     """
     # Split on spaces and hyphens, capitalize each word's first letter only
     parts = re.split(r'(\s+|-)', s)

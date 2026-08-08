@@ -155,15 +155,14 @@ def draw_menu(stdscr):
 
         if k in (ord('1'), ord('2'), ord('3'), ord('4'), ord('5'), ord('6'), ord('7')):
             col = k - ord('1')
-            if col < 7:
-                vs = views[current_view]
-                if col == vs.sort_column:
-                    vs.sort_ascending = not vs.sort_ascending
-                else:
-                    vs.sort_column = col
-                    vs.sort_ascending = True
-                vs.scroll = 0
-                vs.cursor = 0
+            vs = views[current_view]
+            if col == vs.sort_column:
+                vs.sort_ascending = not vs.sort_ascending
+            else:
+                vs.sort_column = col
+                vs.sort_ascending = True
+            vs.scroll = 0
+            vs.cursor = 0
 
         # ── Cursor navigation ──
         if k == curses.KEY_UP:
@@ -290,7 +289,7 @@ def draw_menu(stdscr):
             mins = int(remaining // 60)
             secs = int(remaining % 60)
             bar_width = 12
-            filled = min(bar_width, int((elapsed / 300) * bar_width))
+            filled = min(bar_width, int((elapsed / REFRESH_INTERVAL) * bar_width))
             bar = "█" * filled + "░" * (bar_width - filled)
             status_text = f"Next {mins}:{secs:02d} [{bar}]"
         else:

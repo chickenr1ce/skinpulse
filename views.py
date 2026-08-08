@@ -10,6 +10,12 @@ from curses_utils import safe_addstr
 from constants.display import BANNER_HEIGHT
 
 
+def _overhead(fixed_width_sum, n_columns):
+    """Fixed space consumed by a table row: start offset 2 + all column widths
+    + one 3-char separator advance after EVERY column (incl. the phantom gap
+    after the last column)."""
+    return 2 + fixed_width_sum + 3 * n_columns
+
 
 def compute_scroll_indicator(total, scroll, max_visible):
     """Build a scroll-position string like '↑ 12-17/17 ↓' or empty string."""
@@ -27,30 +33,43 @@ def compute_scroll_indicator(total, scroll, max_visible):
     return " | " + " ".join(parts)
 
 
-def get_sort_value(item, prices, sort_column):
-    market_name = format_market_hash_name(item)
+def get_price(market_name, prices, source='buff163', field='price'):
+    """Look up a numeric field from a source's price entry, 0.0 if missing/None."""
     item_data = prices.get(market_name, {})
     price_dict = item_data.get('prices', {}) if isinstance(item_data, dict) else {}
+    entry = price_dict.get(source, {})
+    if isinstance(entry, dict):
+        return entry.get(field, 0.0) or 0.0
+    return 0.0
+
+
+def get_avg(market_name, prices, days):
+    """Look up a buff163 historical average (days in {7, 30, 60, 90}), 0.0 if missing."""
+    return get_price(market_name, prices, source='buff163', field=f'avg_{days}')
+
+
+def get_sort_value(item, prices, sort_column):
+    market_name = format_market_hash_name(item)
 
     if sort_column == 0:
         return market_name.lower()
     elif sort_column == 1:
-        return price_dict.get('buff163', {}).get('price', 0.0) or 0.0
+        return get_price(market_name, prices)
     elif sort_column == 2:
-        return (price_dict.get('buff163', {}).get('avg_7', 0.0) or 0.0)
+        return get_avg(market_name, prices, 7)
     elif sort_column == 3:
-        return (price_dict.get('buff163', {}).get('avg_30', 0.0) or 0.0)
+        return get_avg(market_name, prices, 30)
     elif sort_column == 4:
-        return (price_dict.get('buff163', {}).get('avg_60', 0.0) or 0.0)
+        return get_avg(market_name, prices, 60)
     elif sort_column == 5:
-        return (price_dict.get('buff163', {}).get('avg_90', 0.0) or 0.0)
-    return 0.0
+        return get_avg(market_name, prices, 90)
+    # Column 6 (Trend): 7d minus 90d — positive when rising, matching the
+    # sparkline's green/red direction.
+    return get_avg(market_name, prices, 7) - get_avg(market_name, prices, 90)
 
 
 def get_live_price(market_name, prices, fallback=0.0):
-    item_data = prices.get(market_name, {})
-    price_dict = item_data.get('prices', {}) if isinstance(item_data, dict) else {}
-    buff = price_dict.get('buff163', {}).get('price', 0.0) or 0.0
+    buff = get_price(market_name, prices)
     return buff if buff > 0 else fallback
 
 
@@ -169,8 +188,8 @@ def render_watchlist(stdscr, y, width, items_to_track, prices,
     """Render the full watchlist table."""
     price_width = 8
     trend_width = 5
-    # 2 = start_x after "║ ", 7 = loop adds 3-sep after ALL 7 columns
-    name_width = max(20, width - (5 * price_width + trend_width + 7 * len(" │ ") + 2))
+    # Fixed overhead: start offset 2 + one 3-char separator after every column.
+    name_width = max(20, width - _overhead(5 * price_width + trend_width, 7))
 
     col_headers = ["Item Name", "Buff163", "7d Avg", "30d Avg", "60d Avg", "90d Avg", "Trend"]
     arrows = [""] * 7
@@ -183,13 +202,13 @@ def render_watchlist(stdscr, y, width, items_to_track, prices,
         {"header": col_headers[1] + arrows[1], "width": price_width, "fmt": f">{price_width}.2f",
          "getter": lambda row: (_row_buff_price(row, prices), 0)},
         {"header": col_headers[2] + arrows[2], "width": price_width, "fmt": f">{price_width}.2f",
-         "getter": lambda row: (_row_avg_price(row, prices, '7d'), _avg_color(row, prices, '7d'))},
+         "getter": lambda row: (_row_avg_price(row, prices, 7), _avg_color(row, prices, 7))},
         {"header": col_headers[3] + arrows[3], "width": price_width, "fmt": f">{price_width}.2f",
-         "getter": lambda row: (_row_avg_price(row, prices, '30d'), _avg_color(row, prices, '30d'))},
+         "getter": lambda row: (_row_avg_price(row, prices, 30), _avg_color(row, prices, 30))},
         {"header": col_headers[4] + arrows[4], "width": price_width, "fmt": f">{price_width}.2f",
-         "getter": lambda row: (_row_avg_price(row, prices, '60d'), _avg_color(row, prices, '60d'))},
+         "getter": lambda row: (_row_avg_price(row, prices, 60), _avg_color(row, prices, 60))},
         {"header": col_headers[5] + arrows[5], "width": price_width, "fmt": f">{price_width}.2f",
-         "getter": lambda row: (_row_avg_price(row, prices, '90d'), _avg_color(row, prices, '90d'))},
+         "getter": lambda row: (_row_avg_price(row, prices, 90), _avg_color(row, prices, 90))},
         {"header": col_headers[6] + arrows[6], "width": trend_width, "fmt": f"^{trend_width}",
          "getter": lambda row: _render_sparkline(row, prices)},
     ]
@@ -203,15 +222,13 @@ def render_watchlist(stdscr, y, width, items_to_track, prices,
 
 
 def _row_buff_price(row, prices):
-    item_name = format_market_hash_name(row)
-    item_data = prices.get(item_name, {})
-    return item_data.get('prices', {}).get('buff163', {}).get('price', 0.0) or 0.0
+    return get_price(format_market_hash_name(row), prices)
 
 
-def _avg_color(row, prices, period):
+def _avg_color(row, prices, days):
     """Return curses color_pair for an avg vs current buff163 price.
     Green (1) when avg < current (price rising), red (2) when avg > current (falling)."""
-    avg = _row_avg_price(row, prices, period)
+    avg = _row_avg_price(row, prices, days)
     current = _row_buff_price(row, prices)
     if avg <= 0 or current <= 0:
         return 0
@@ -222,22 +239,15 @@ def _avg_color(row, prices, period):
     return 0
 
 
-def _row_avg_price(row, prices, period):
-    """Extract a historical average price (7d/30d/60d/90d) for an item."""
-    item_name = format_market_hash_name(row)
-    item_data = prices.get(item_name, {})
-    price_dict = item_data.get('prices', {}) if isinstance(item_data, dict) else {}
-    # Averages live on the buff163 price entry
-    buff_entry = price_dict.get('buff163', {})
-    if isinstance(buff_entry, dict):
-        return buff_entry.get(f'avg_{period.replace("d","")}', 0.0) or 0.0
-    return 0.0
+def _row_avg_price(row, prices, days):
+    """Extract a historical average price (7/30/60/90 days) for an item."""
+    return get_avg(format_market_hash_name(row), prices, days)
 
 
 def _render_sparkline(row, prices):
     """Build a 4-char Unicode sparkline from 90d→60d→30d→7d averages.
     Returns (sparkline_str, color_attr)."""
-    periods = ['90d', '60d', '30d', '7d']
+    periods = [90, 60, 30, 7]
     avgs = [_row_avg_price(row, prices, p) for p in periods]
 
     valid = [(i, v) for i, v in enumerate(avgs) if v and v > 0]
@@ -305,8 +315,8 @@ def render_portfolio(stdscr, y, width, portfolio, portfolio_slug, prices,
     if sort_column < len(portfolio_cols):
         portfolio_arrows[sort_column] = " ▲" if sort_ascending else " ▼"
 
-    # 2 = start_x after "║ ", 7 = loop adds 3-sep after ALL 7 columns
-    name_w = max(15, width - (3 + 8 + 9 + 10 + 9 + 6 + 7 * len(" │ ") + 2))
+    # Fixed overhead: start offset 2 + one 3-char separator after every column.
+    name_w = max(15, width - _overhead(45, 7))
     columns = [
         {"header": portfolio_cols[0] + portfolio_arrows[0], "width": name_w, "fmt": f"<{name_w}",
          "getter": lambda row: (row.get("market_hash_name", ""), 0)},
