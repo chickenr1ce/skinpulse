@@ -4,7 +4,7 @@
 
 - **`python3 tui.py`** — the only executable.
 - Dependency: only `requests`. No requirements.txt — install via `pip install requests`.
-- No test, lint, typecheck, or formatter config exists.
+- Tests: `python3 -m pytest tests/` from the repo root. Benchmark: `python3 benchmarks/grade_001.py` (all 4 checks must pass). No lint/typecheck/formatter config exists.
 - Weapon names are defined in `constants/weapons.py` and imported by `items.py`, `manage.py`, and `wizard.py`.
 
 ## TUI Keybindings

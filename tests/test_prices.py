@@ -48,8 +48,8 @@ class TestWatchlistPricesLoad:
         prices = _fetch([_raw_item()])
         assert NAME in prices
         assert _row_buff_price(ITEM, prices) == 166.79
-        assert _row_avg_price(ITEM, prices, "7d") == 166.58
-        assert _row_avg_price(ITEM, prices, "90d") == 167.24
+        assert _row_avg_price(ITEM, prices, 7) == 166.58
+        assert _row_avg_price(ITEM, prices, 90) == 167.24
         assert get_sort_value(ITEM, prices, 1) == 166.79
         assert get_sort_value(ITEM, prices, 2) == 166.58
 
@@ -62,13 +62,13 @@ class TestWatchlistPricesLoad:
         raw = _raw_item()
         raw["prices"][0].pop("avg_90")
         prices = _fetch([raw])
-        assert _row_avg_price(ITEM, prices, "90d") == 0.0
+        assert _row_avg_price(ITEM, prices, 90) == 0.0
         assert _row_buff_price(ITEM, prices) == 166.79
 
     def test_missing_provider_entry_falls_back_to_zero(self):
         prices = {NAME: {"prices": {"skins": {"price": 170.0}}}}
         assert _row_buff_price(ITEM, prices) == 0.0
-        assert _row_avg_price(ITEM, prices, "7d") == 0.0
+        assert _row_avg_price(ITEM, prices, 7) == 0.0
 
     def test_none_price_falls_back_to_zero(self):
         prices = {NAME: {"prices": {"buff163": {"price": None}}}}
