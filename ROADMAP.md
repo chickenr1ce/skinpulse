@@ -10,6 +10,8 @@
 - [x] manage.py CLI — add/list/remove commands
 - [x] Portfolio view — press `p` to toggle, shows Qty/Buy/Now/Total/P&L/ROI with live prices
 - [x] API reference doc — `API_REFERENCE.md` with all trader tier endpoints
+- [x] Item selection — arrow keys highlight/select rows (cursor); `d` quick-removes the selected watchlist item
+- [x] Scrolling — Ctrl-D/Ctrl-U (half-page), PgDn/PgUp (full-page), g/G (top/bottom) when items exceed terminal height, with scroll-position indicator
 
 ## Planned
 
@@ -30,8 +32,7 @@
 - [ ] Best/worst day insight — show weekly patterns (best day, weekend vs weekday delta) from portfolio stats
 
 ### Quality of Life
-- [ ] Item selection — arrow keys / jk to highlight items (future: quick-remove, per-item settings via selected item). Selection is separate from scrolling — use modifier keys for scrolling to avoid conflicts.
-- [ ] Scrolling — Ctrl-D/Ctrl-U (half-page), PgDn/PgUp (full-page), g/G (top/bottom) when items exceed terminal height. Arrow keys / jk are reserved for item selection.
+- [ ] Item selection — `jk` keys as selection aliases; per-item settings via selected item (quick-remove via `d` already done)
 - [ ] Profitable items filter — filter portfolio view to show only items in profit/loss
 - [ ] Configurable refresh interval — +/- keys to adjust 300s default
 - [ ] Historical tracking — price history log per session, show biggest movers
