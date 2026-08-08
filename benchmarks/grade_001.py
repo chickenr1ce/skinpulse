@@ -40,7 +40,7 @@ PORTFOLIO_OVERHEAD = 2 + 7 * 3 + sum(PF_OTHERS)   # 68
 # name_w + 66 (watchlist) and name_w + 67 (portfolio). With the name floor of
 # 20, the portfolio header needs width >= 88 — which is why MIN_WIDTH = 88.
 WL_HEADER_OVERFLOW = 2   # "Trend ▲" (7 chars) in the 5-wide trend column
-PF_HEADER_OVERFLOW = 3   # "Qty ▲" (6 chars) in the 3-wide qty column
+PF_HEADER_OVERFLOW = 2   # "Qty ▲" (5 chars) in the 3-wide qty column
 
 
 # ---------------------------------------------------------------------------
@@ -95,6 +95,15 @@ def _eval_expr(node, namespace):
             arg = _eval_expr(node.args[0], namespace)
             if isinstance(arg, str):
                 return len(arg)
+        # The views._overhead(fixed_width_sum, n_columns) helper:
+        # start offset 2 + all fixed column widths + one 3-char advance per column.
+        if (isinstance(node.func, ast.Name) and node.func.id == "_overhead"
+                and len(node.args) == 2):
+            fixed_sum = _eval_expr(node.args[0], namespace)
+            n_columns = _eval_expr(node.args[1], namespace)
+            if (isinstance(fixed_sum, (int, float))
+                    and isinstance(n_columns, (int, float))):
+                return 2 + fixed_sum + 3 * n_columns
         return None
     return None
 
@@ -238,7 +247,9 @@ def check_math_verification(state):
         header_last = _header_last(name_w, others, header_overflow)
         border = min_width - 1
         data_fits = data_last <= border
-        header_fits = header_last <= border
+        # Strict: the arrow-overflowing header must not reach the right border
+        # (the border ║ would overwrite the last arrow character).
+        header_fits = header_last < border
         fits = data_fits and header_fits
         results.append(
             f"{view_name}: overhead={overhead}, name_w={name_w}, "
