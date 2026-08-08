@@ -1,22 +1,21 @@
 import curses
 import threading
 import time
-import requests
 from price_empire_scraper import PriceEmpireScraper
 from items import (
     load_items, save_items, get_items_mtime,
     format_item_line,
 )
-from constants.display import MIN_HEIGHT, MIN_WIDTH
+from constants.display import MIN_HEIGHT, MIN_WIDTH, BANNER_HEIGHT, REFRESH_INTERVAL
 from utils import load_config
 from wizard import run_add_wizard
 from curses_utils import safe_addstr, confirm_dialog
 from views import (
     compute_scroll_indicator, render_watchlist, render_portfolio,
-    get_sort_value, get_portfolio_sort_value, get_live_price,
+    get_sort_value,
 )
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 
 @dataclass
@@ -40,7 +39,7 @@ def draw_menu(stdscr):
     stdscr.timeout(100)
 
     config_data = load_config()
-    api_key = config_data.get("api_key", "YOUR_API_KEY")
+    api_key = config_data.get("api_key", "")
     portfolio_slug = config_data.get("portfolio_slug", "")
 
     items_mtime = get_items_mtime()
@@ -51,7 +50,9 @@ def draw_menu(stdscr):
     last_update = 0
     prices = {}
     loading = False
-    error_message = ""
+    error_message = "" if api_key else (
+        "No API key in config.json — copy config.json.example to config.json"
+    )
     views = {
         "watchlist": ViewState(sort_column=1),
         "portfolio": ViewState(),
@@ -73,7 +74,7 @@ def draw_menu(stdscr):
     while k != ord('q'):
         stdscr.clear()
         height, width = stdscr.getmaxyx()
-        banner_height = 6 if height >= 20 else 0
+        banner_height = BANNER_HEIGHT if height >= 20 else 0
         content_rows = max(1, height - 8 - banner_height)
 
         if height < MIN_HEIGHT or width < MIN_WIDTH:
@@ -123,10 +124,10 @@ def draw_menu(stdscr):
             should_refresh = True
         elif k == ord('r'):
             should_refresh = True
-        elif current_time - last_update > 300:
+        elif current_time - last_update > REFRESH_INTERVAL:
             should_refresh = True
 
-        if should_refresh and not loading:
+        if should_refresh and not loading and api_key:
             loading = True
 
             # Start async price fetch
@@ -154,8 +155,7 @@ def draw_menu(stdscr):
 
         if k in (ord('1'), ord('2'), ord('3'), ord('4'), ord('5'), ord('6'), ord('7')):
             col = k - ord('1')
-            max_cols = 7 if current_view == "watchlist" else 7
-            if col < max_cols:
+            if col < 7:
                 vs = views[current_view]
                 if col == vs.sort_column:
                     vs.sort_ascending = not vs.sort_ascending
@@ -213,7 +213,7 @@ def draw_menu(stdscr):
             vs.cursor = 0
         elif k == ord('G'):
             data_len = len(items_to_track) if current_view == "watchlist" else len(portfolio.get("items", []))
-            vs.scroll = 10**9
+            vs.scroll = data_len
             vs.cursor = max(0, data_len - 1)
 
         # ── Auto-scroll cursor into view ──
@@ -286,7 +286,7 @@ def draw_menu(stdscr):
             status_text = f"{spinner_char} Refreshing..."
         elif last_update > 0:
             elapsed = current_time - last_update
-            remaining = max(0, 300 - elapsed)
+            remaining = max(0, REFRESH_INTERVAL - elapsed)
             mins = int(remaining // 60)
             secs = int(remaining % 60)
             bar_width = 12
