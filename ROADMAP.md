@@ -34,7 +34,7 @@
 ### Quality of Life
 - [ ] Item selection — `jk` keys as selection aliases; per-item settings via selected item (quick-remove via `d` already done)
 - [ ] Profitable items filter — filter portfolio view to show only items in profit/loss
-- [ ] Configurable refresh interval — +/- keys to adjust 300s default
+- [ ] Configurable refresh interval — +/- keys to adjust 900s default
 - [ ] Historical tracking — price history log per session, show biggest movers
 - [ ] Minimize mode — compact view with fewer columns
 - [ ] Currency selector — cycle through EUR/USD/GBP/CNY via config key

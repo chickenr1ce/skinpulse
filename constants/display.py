@@ -6,4 +6,6 @@ MIN_WIDTH = 88
 BANNER_HEIGHT = 6
 
 # Seconds between automatic price refreshes in the TUI.
-REFRESH_INTERVAL = 300
+# 900 s (15 min): the PriceEmpire Trader tier budget (100/day, 1,000/month) is
+# shared with the skinpulse web app, so the TUI must be a disciplined consumer.
+REFRESH_INTERVAL = 900

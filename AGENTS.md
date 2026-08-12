@@ -1,5 +1,9 @@
 # Skinpulse
 
+Skinpulse is a tui to manage and view CS2 skin prices in a saved watchlist. Users can also view their priceempire portfoilio if they have one.
+Skins to be stored and watched are in items.txt.
+Prices are fetched using the priceempire api.
+
 ## Entrypoint
 
 - **`python3 tui.py`** — the only executable.
@@ -19,7 +23,7 @@
 | `Ctrl-D` / `PgDn` | Scroll half/full page down |
 | `Ctrl-U` / `PgUp` | Scroll half/full page up |
 | `g` / `G` | Jump to top / bottom |
-| Auto | Refreshes every 300s |
+| Auto | Refreshes every 15 min |
 
 Watchlist avg columns (7d/30d/60d/90d) and sparkline are green when current buff163 price exceeds the average, red when below.
 In portfolio view, P&L and ROI are green for profit, red for loss.
@@ -31,7 +35,7 @@ Scrolling indicator in the help bar shows position (e.g. `↑ 12-17/17 ↓`) whe
 - Params: `sources=buff163,skins`, `avg=true`, `currency=EUR`.
 - Available sources: `buff163` and `skins` (skins.com). Do not use `csfloat`, `skinport`, etc. Note: the TUI watchlist only displays buff163 prices and historical averages.
 - Currency: `EUR`. The API returns raw cents values; `price_empire_scraper.py` divides all `price` and `avg_*` fields by 100.
-- Rate limit: auto-refresh every 300s in TUI; `'r'` for manual refresh; `'q'` to quit.
+- Rate limit: auto-refresh every 15 min (900s) in TUI; `'r'` for manual refresh; `'q'` to quit.
 
 ## Config
 
