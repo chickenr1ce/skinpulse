@@ -31,6 +31,11 @@ class TestParseItemLine:
         item = parse_item_line("★ Karambit | Black Laminate")
         assert item["name"] == "Karambit | Black Laminate"
 
+    def test_glove_star_stripped(self):
+        item = parse_item_line("★ Sport Gloves | Nocts, Field-Tested")
+        assert item["name"] == "Sport Gloves | Nocts"
+        assert item["wear"] == "Field-Tested"
+
     def test_comment_and_blank_lines_ignored(self):
         assert parse_item_line("# comment") is None
         assert parse_item_line("") is None
@@ -89,6 +94,16 @@ class TestFormatMarketHashName:
         item = {"name": "Karambit | Black Laminate", "wear": "Well-Worn",
                 "stattrak": False, "souvenir": False}
         assert format_market_hash_name(item) == "★ Karambit | Black Laminate (Well-Worn)"
+
+    def test_glove_star(self):
+        item = {"name": "Sport Gloves | Nocts", "wear": "Field-Tested",
+                "stattrak": False, "souvenir": False}
+        assert format_market_hash_name(item) == "★ Sport Gloves | Nocts (Field-Tested)"
+
+    def test_glove_star_not_duplicated(self):
+        item = {"name": "★ Sport Gloves | Nocts", "wear": None,
+                "stattrak": False, "souvenir": False}
+        assert format_market_hash_name(item) == "★ Sport Gloves | Nocts"
 
     def test_non_knife_not_starred(self):
         item = {"name": "AK-47 | Redline", "wear": None,

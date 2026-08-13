@@ -78,3 +78,13 @@ KNIFE_NAMES = frozenset([
     "Ursus Knife", "Classic Knife", "Paracord Knife", "Survival Knife",
     "Nomad Knife", "Skeleton Knife", "Kukri Knife", "Clutch Knife",
 ])
+
+# Gloves are "Extraordinary" rarity items, so their Steam Market hash names
+# also carry the ★ prefix (e.g. "★ Sport Gloves | Nocts (Field-Tested)").
+GLOVE_NAMES = frozenset([
+    "Sport Gloves", "Driver Gloves", "Moto Gloves", "Specialist Gloves",
+    "Bloodhound Gloves", "Hydra Gloves",
+])
+
+# Knives and gloves: every weapon whose market hash name is starred.
+STARRED_ITEMS = KNIFE_NAMES | GLOVE_NAMES
