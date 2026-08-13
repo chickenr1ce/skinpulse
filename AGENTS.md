@@ -1,6 +1,6 @@
 # Skinpulse
 
-Skinpulse is a tui to manage and view CS2 skin prices in a saved watchlist. Users can also view their priceempire portfoilio if they have one.
+Skinpulse is a tui to manage and view CS2 skin prices in a saved watchlist. Users can also view their priceempire portfolio if they have one.
 Skins to be stored and watched are in items.txt.
 Prices are fetched using the priceempire api.
 
@@ -11,23 +11,19 @@ Prices are fetched using the priceempire api.
 - Tests: `python3 -m pytest tests/` from the repo root. Benchmark: `python3 benchmarks/grade_001.py` (all 4 checks must pass). No lint/typecheck/formatter config exists.
 - Weapon names are defined in `constants/weapons.py` and imported by `items.py`, `manage.py`, and `wizard.py`.
 
-## TUI Keybindings
+## TUI Behavior Contract
 
-| Key | Action |
-|-----|--------|
-| `r` | Force refresh (API fetch) |
-| `p` | Toggle between watchlist and portfolio view |
-| `q` | Quit |
-| `1` - `7` | Sort watchlist by column (name/buff163/7d/30d/60d/90d/trend). Press same key again to toggle asc/desc. ▲/▼ indicator shown in header. |
-| `1` - `7` | Sort portfolio by column (name/qty/buy/now/total/P&L/ROI). Same toggle behavior. |
-| `Ctrl-D` / `PgDn` | Scroll half/full page down |
-| `Ctrl-U` / `PgUp` | Scroll half/full page up |
-| `g` / `G` | Jump to top / bottom |
-| Auto | Refreshes every 15 min |
+The key map is rendered in the in-app help bar (bottom line) and handled in `tui.py` — that is the authoritative source for keys. When adding a key, don't collide with the existing set: `q`, `r`, `p`, `a`, `d`, `1`-`7`, `g`, `G`, `Ctrl-D`/`Ctrl-U`, `PgUp`/`PgDn`.
 
-Watchlist avg columns (7d/30d/60d/90d) and sparkline are green when current buff163 price exceeds the average, red when below.
-In portfolio view, P&L and ROI are green for profit, red for loss.
-Scrolling indicator in the help bar shows position (e.g. `↑ 12-17/17 ↓`) when items exceed terminal height.
+Behavioral invariants that must not break:
+
+- **Refresh cadence** — auto-refresh every 15 min (900s, `REFRESH_INTERVAL` in `constants/display.py`); `r` forces a manual refresh. This cadence is a deliberate budget constraint: the PriceEmpire Trader tier allows ~100 requests/day, shared with the skinpulse web app. Don't shorten it or add fetch paths without accounting for that.
+- **Hot-reload** — `items.txt` is re-read automatically when it changes, via mtime polling (`items.py:get_items_mtime`). There is deliberately no manual reload key.
+- **In-app editing** — the watchlist view supports `a` (interactive add wizard) and `d` (delete selected item, with confirmation). Items are saved back to `items.txt` immediately.
+- **Views** — `p` toggles watchlist/portfolio, but only when `portfolio_slug` is configured. The watchlist shows buff163 prices and historical averages only.
+- **Sorting** — `1`-`7` sort by column (watchlist: name/buff163/7d/30d/60d/90d/trend; portfolio: name/qty/buy/now/total/P&L/ROI); pressing the same key again toggles asc/desc, with ▲/▼ in the header. Trend is defined as `7d − 90d` so its direction matches the sparkline's green/red.
+- **Colors** — watchlist avg columns (7d/30d/60d/90d) and sparkline are green when current buff163 price exceeds the average, red when below. Portfolio P&L and ROI are green for profit, red for loss.
+- **Scrolling** — `Ctrl-D`/`PgDn` scroll down half/full page, `Ctrl-U`/`PgUp` up; `g`/`G` jump to top/bottom. When items exceed terminal height, the help bar shows a position indicator (e.g. `↑ 12-17/17 ↓`).
 
 ## API (PriceEmpire Trader Tier)
 
@@ -35,7 +31,7 @@ Scrolling indicator in the help bar shows position (e.g. `↑ 12-17/17 ↓`) whe
 - Params: `sources=buff163,skins`, `avg=true`, `currency=EUR`.
 - Available sources: `buff163` and `skins` (skins.com). Do not use `csfloat`, `skinport`, etc. Note: the TUI watchlist only displays buff163 prices and historical averages.
 - Currency: `EUR`. The API returns raw cents values; `price_empire_scraper.py` divides all `price` and `avg_*` fields by 100.
-- Rate limit: auto-refresh every 15 min (900s) in TUI; `'r'` for manual refresh; `'q'` to quit.
+- Rate limit: Trader tier allows ~100 requests/day (shared with the web app) — the 15-min TUI refresh cadence is a deliberate budget constraint (see TUI Behavior Contract).
 
 ## Config
 
@@ -46,15 +42,17 @@ Scrolling indicator in the help bar shows position (e.g. `↑ 12-17/17 ↓`) whe
 
 ### Primary: `items.txt` (plain-text watchlist)
 
-One item per line, format: `[ST ]Name[, Wear]`
+One item per line, format: `[ST ][SV ]Name[, Wear]`
 
 ```
 Karambit | Black Laminate, Well-Worn
 ST AK-47 | Redline, Field-Tested
+SV AK-47 | B the Monster, Field-Tested
 M4A1-S | Printstream
 ```
 
 - `ST ` prefix = StatTrak.
+- `SV ` prefix = Souvenir.
 - `#` comments are ignored.
 - Name is the full "Weapon | Skin" string (the ★ star is auto-added by `format_market_hash_name()`).
 - Wear accepts short codes: `fn`, `mw`, `ft`, `ww`, `bs` (e.g. `AK-47 | Redline, ft`).
@@ -73,21 +71,18 @@ Items are stored exclusively in `items.txt`.
 
 #### `manage.py add` — interactive flow
 
-1. **Weapon selection** — type to fuzzy-search, enter an index, or type `list` to see all weapons.
-   - Accepts flexible input: `ak47`, `ak-47`, `AK 47`, `m4a1s`, `deserteagle` all resolve correctly.
-   - Full-name shortcut: typing `AK-47 Redline` auto-splits into weapon + skin.
-2. **Skin input** — auto-capitalized with correct apostrophe handling (`rameses reach` → `Rameses Reach`).
-3. **Wear** — optional. Accepts short codes: `fn`, `mw`, `ft`, `ww`, `bs` (or full names like `Factory New`).
-4. **StatTrak** — y/N toggle.
-5. **API validation** — the item is checked against the PriceEmpire API before saving:
-   - **Found** → shows prices from buff163 and skins, then asks for confirmation.
-   - **Not found** → shows similar items ("Did you mean...?") as numbered options:
-     - Pick a **number** to auto-correct the skin name and wear from the API, with prices.
-     - `p` — proceed anyway (add despite the warning)
-     - `r` — retry (re-enter the skin name)
-     - `c` — cancel
-   - **API error / no key** → warns but lets you proceed.
+Prompts ask for weapon (flexible input: `ak47`, `AK 47`, `m4a1s` all resolve; typing `AK-47 Redline` auto-splits into weapon + skin), skin (auto-capitalized, apostrophe-safe: `rameses reach` → `Rameses Reach`), optional wear (short codes or full names), StatTrak, and Souvenir.
+
+The item is validated against the PriceEmpire API before saving — same contract as the TUI `a` wizard (both use `utils.validate_item`):
+
+- **Found** → shows prices from buff163 and skins, then asks for confirmation.
+- **Not found** → shows similar items ("Did you mean...?") as numbered options:
+  - Pick a **number** to auto-correct the skin name and wear from the API, with prices.
+  - `p` — proceed anyway (add despite the warning)
+  - `r` — retry (re-enter the skin name)
+  - `c` — cancel
+- **API error / no key** → warns but lets you proceed.
 
 ## Name Formatting
 
-`format_market_hash_name()` prepends `★` for all knife types using an exact `KNIFE_NAMES` lookup (defined in `constants/weapons.py`). All 21 knife types (including `Bayonet`, `Shadow Daggers`, `Kukri Knife`, etc.) are handled correctly.
+`format_market_hash_name()` turns an item dict into a Steam Market Hash Name: `Souvenir `/`StatTrak™ ` prefixes, `★` for knives and gloves, and wear in parentheses (e.g. `StatTrak™ ★ Karambit | Black Laminate (Well-Worn)`, `★ Sport Gloves | Nocts (Field-Tested)`). The `★` uses an exact `STARRED_ITEMS` lookup (defined in `constants/weapons.py` as `KNIFE_NAMES | GLOVE_NAMES`) — all 21 knife types (including `Bayonet`, `Shadow Daggers`, `Kukri Knife`, etc.) and all 6 glove types (e.g. `Sport Gloves`, `Driver Gloves`, `Moto Gloves`) are handled correctly.
