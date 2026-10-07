@@ -72,7 +72,10 @@ def draw_menu(stdscr):
     portfolio_data = None
 
     while k != ord('q'):
-        stdscr.clear()
+        # erase() blanks the virtual screen only; curses then repaints just the
+        # changed cells. clear() instead forces a full physical repaint every
+        # frame, which flickers at the 10 Hz idle redraw rate.
+        stdscr.erase()
         height, width = stdscr.getmaxyx()
         banner_height = BANNER_HEIGHT if height >= 20 else 0
         content_rows = max(1, height - 8 - banner_height)
