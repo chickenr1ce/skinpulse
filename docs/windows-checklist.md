@@ -16,7 +16,7 @@ Run this on a Windows machine before tagging a release. Download the Windows art
 
 ## Input
 
-- [ ] Typing works in the setup screen without an IME: API key, portfolio slug, and the folder path for import.
+- [ ] Typing works in the setup screen without an IME: API key and portfolio slug. "Import from a folder…" opens a folder picker.
 - [ ] Typing works in the add dialog without an IME, including backspace and paste of a plain item name.
 - [ ] Shortcuts work: `q`, `r`, `p`, `a`, `d`, `i`, `e`, `1`-`7` and pressing the same number again, Up/Down, `Ctrl-D`, `Ctrl-U`, `PgDn`, `PgUp`, `g`, `G`.
 - [ ] Import opens a file picker and can pick `items.txt`; export opens a save picker and writes the file.
