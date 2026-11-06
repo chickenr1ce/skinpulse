@@ -48,9 +48,9 @@ pub fn view(s: &App, t: &Tokens) -> El {
                 Delta::Flat => muted,
             };
             let row_data = &s.rows[i];
-            let quote = s.book.quote(&row_data.id);
+            let quote = s.book.quote(&row_data.name);
             let body = match id {
-                "name" => name_cell(&row_data.id, row_data.item.wear.as_deref(), font, base, muted),
+                "name" => name_cell(&row_data.name, row_data.item.wear.as_deref(), font, base, muted),
                 "buff" => number_cell(quote.price, number, base, faint),
                 "d7" => avg_cell(&quote, quote.avg_7, number, &tone, faint),
                 "d30" => avg_cell(&quote, quote.avg_30, number, &tone, faint),
@@ -69,11 +69,16 @@ pub fn view(s: &App, t: &Tokens) -> El {
         .grow(1.0)
         .min_h(0.0);
     let underline = el().key("header-rule").pin(Some(GUTTER - CELL_PAD), Some(HEADER_HEIGHT - 1.0), Some(GUTTER - CELL_PAD), None).h(1.0).fill(rule).a11y_hidden();
-    let mut page = col().key("watchlist").w_full().grow(1.0).min_h(0.0).px(GUTTER - CELL_PAD).child(table).child(underline);
+    let mut page = col().key("watchlist").w_full().grow(1.0).min_h(0.0).px(GUTTER - CELL_PAD).on_layout(track_height).child(table).child(underline);
     if s.rows.is_empty() {
         page = page.child(empty_state(t));
     }
     page
+}
+
+/// Keeps the list's height for the paging keys.
+pub fn track_height(s: &mut App, r: [f32; 4]) {
+    s.list_height = (r[3] - HEADER_HEIGHT).max(0.0);
 }
 
 fn empty_state(t: &Tokens) -> El {
@@ -88,14 +93,14 @@ fn empty_state(t: &Tokens) -> El {
 
 /// A cell's content over the hairline that divides rows. The line reaches past the cell's padding,
 /// so the cells of a row join into one rule.
-fn ruled(body: El, end: bool, rule: Color) -> El {
+pub fn ruled(body: El, end: bool, rule: Color) -> El {
     let cell = row().w_full().h_full().center_y().min_w(0.0);
     let cell = if end { cell.justify_end() } else { cell };
     cell.child(body).child(el().pin(Some(-CELL_PAD), None, Some(-CELL_PAD), Some(0.0)).h(1.0).fill(rule).a11y_hidden())
 }
 
 /// The item's name with its wear quieter beside it.
-fn name_cell(hash_name: &str, wear: Option<&str>, font: TextStyle, base: Color, muted: Color) -> El {
+pub fn name_cell(hash_name: &str, wear: Option<&str>, font: TextStyle, base: Color, muted: Color) -> El {
     let suffix = wear.map(|w| format!(" ({w})"));
     let name = suffix.as_deref().and_then(|s| hash_name.strip_suffix(s)).unwrap_or(hash_name);
     let mut line = row().gap(6.0).center_y().min_w(0.0).shrink().child(text(name.to_string()).font(font).color(base).truncate().shrink().min_w(0.0).help_when_truncated(hash_name.to_string()));
@@ -105,11 +110,11 @@ fn name_cell(hash_name: &str, wear: Option<&str>, font: TextStyle, base: Color, 
     line
 }
 
-fn money(v: Option<f64>) -> String {
+pub fn money(v: Option<f64>) -> String {
     v.map_or("—".to_string(), |v| format!("{v:.2}"))
 }
 
-fn number_cell(v: Option<f64>, font: TextStyle, color: Color, missing: Color) -> El {
+pub fn number_cell(v: Option<f64>, font: TextStyle, color: Color, missing: Color) -> El {
     text(money(v)).font(font).color(if v.is_some() { color } else { missing }).single_line()
 }
 

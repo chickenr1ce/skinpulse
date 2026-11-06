@@ -106,6 +106,9 @@ fn lock_down(_path: &Path) -> io::Result<()> {
     Ok(())
 }
 
+/// How many columns each view can sort by.
+const SORT_COLUMNS: usize = 7;
+
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ViewKind {
     #[default]
@@ -140,7 +143,14 @@ impl Default for UiState {
 
 impl UiState {
     pub fn load(path: &Path) -> UiState {
-        fs::read_to_string(path).ok().and_then(|text| serde_json::from_str(&text).ok()).unwrap_or_default()
+        let state: UiState = fs::read_to_string(path).ok().and_then(|text| serde_json::from_str(&text).ok()).unwrap_or_default();
+        // Valid JSON can still name a column that doesn't exist, and the views index by it.
+        let defaults = UiState::default();
+        UiState {
+            watchlist_sort: if state.watchlist_sort.column < SORT_COLUMNS { state.watchlist_sort } else { defaults.watchlist_sort },
+            portfolio_sort: if state.portfolio_sort.column < SORT_COLUMNS { state.portfolio_sort } else { defaults.portfolio_sort },
+            ..state
+        }
     }
 
     pub fn save(&self, path: &Path) -> io::Result<()> {
@@ -200,6 +210,17 @@ mod tests {
 
     fn paths(root: &Path) -> Paths {
         Paths { config_dir: root.join("config/skinpulse"), cache_dir: root.join("cache/skinpulse") }
+    }
+
+    #[test]
+    fn a_saved_sort_column_that_does_not_exist_falls_back() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("state.json");
+        fs::write(&path, r#"{"view":"Portfolio","watchlist_sort":{"column":99,"ascending":false},"portfolio_sort":{"column":6,"ascending":false}}"#).unwrap();
+        let state = UiState::load(&path);
+        assert_eq!(state.watchlist_sort, UiState::default().watchlist_sort);
+        assert_eq!(state.portfolio_sort, SortChoice { column: 6, ascending: false }, "a valid one stays");
+        assert_eq!(state.view, ViewKind::Portfolio);
     }
 
     #[test]

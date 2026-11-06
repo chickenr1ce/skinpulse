@@ -1,0 +1,7 @@
+[Desktop Entry]
+Type=Application
+Name=Skinpulse
+Comment=Track CS2 skin prices
+Exec=skinpulse
+Terminal=false
+Categories=Finance;Utility;

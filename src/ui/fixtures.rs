@@ -1,11 +1,12 @@
 //! Sample data for headless snapshots. None of it reaches a normal launch.
 
 use skinpulse::logic::config::{Config, SortChoice, UiState, ViewKind};
+use skinpulse::logic::portfolio::{Holding, Portfolio, Summary};
 use skinpulse::logic::prices::{ItemPrices, PriceBook, Quote};
 use skinpulse::logic::refresh::{REFRESH_INTERVAL, Schedule};
 use skinpulse::logic::watchlist::Watchlist;
 
-use super::app::App;
+use super::app::{App, Modal};
 
 type Scene = (&'static str, fn(&mut App));
 
@@ -13,6 +14,32 @@ pub const SCENES: &[Scene] = &[
     ("watchlist", |s| *s = sample(None)),
     ("stale", |s| *s = sample(Some("API status 429. Showing data from 14:02."))),
     ("empty", |s| *s = App::new(Config::default(), Watchlist::default(), PriceBook::default(), ui())),
+    ("portfolio", |s| {
+        *s = sample(None);
+        s.ui.view = ViewKind::Portfolio;
+    }),
+    ("setup", |s| {
+        *s = sample(None);
+        s.config = Config::default();
+        s.open_setup();
+    }),
+    ("add", |s| {
+        *s = sample(None);
+        s.open_add();
+    }),
+    ("delete", |s| {
+        *s = sample(None);
+        super::dialogs::ask_delete(s);
+    }),
+    ("import", |s| {
+        *s = sample(None);
+        s.import = Some(s.watchlist.preview_import("AK-47 | Redline, ft\nAWP | Dragon Lore, Factory New\nP250 | See Ya Later\nnot a skin\n"));
+        s.modal = Modal::Import;
+    }),
+    ("export", |s| {
+        *s = sample(None);
+        s.modal = Modal::Export;
+    }),
 ];
 
 const WATCHLIST: &str = "\
@@ -60,7 +87,19 @@ fn sample(error: Option<&str>) -> App {
     ] {
         book.insert(name, prices);
     }
-    let mut app = App::new(Config::default(), Watchlist::parse(WATCHLIST), book, ui());
+    let config = Config { api_key: "sample".into(), portfolio_slug: "sample".into() };
+    let mut app = App::new(config, Watchlist::parse(WATCHLIST), book, ui());
+    app.portfolio = Some(Portfolio {
+        summary: Summary { name: "Long holds".into(), total_value: 2_986.45, total_profit: 412.30, total_roi: 16.02, change_24h: -18.75, change_24h_pct: -0.62 },
+        items: vec![
+            Holding { market_hash_name: "★ Karambit | Black Laminate (Well-Worn)".into(), holdings: 1, avg_buy: Some(355.00), current_price: Some(410.00) },
+            Holding { market_hash_name: "AK-47 | Vulcan (Minimal Wear)".into(), holdings: 4, avg_buy: Some(181.20), current_price: Some(165.00) },
+            Holding { market_hash_name: "M4A1-S | Printstream (Field-Tested)".into(), holdings: 8, avg_buy: Some(62.50), current_price: Some(95.00) },
+            Holding { market_hash_name: "AWP | Asiimov (Battle-Scarred)".into(), holdings: 2, avg_buy: Some(71.30), current_price: Some(71.30) },
+            Holding { market_hash_name: "Sticker | Crown (Foil)".into(), holdings: 3, avg_buy: None, current_price: None },
+        ],
+    });
+    app.resort_portfolio();
     app.schedule = Schedule { prices_at: Some(0.0), ..Schedule::default() };
     app.now = REFRESH_INTERVAL - 724.0;
     app.error = error.map(str::to_string);

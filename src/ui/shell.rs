@@ -1,12 +1,12 @@
 //! The frame every screen sits in: view switcher and refresh status on top, key hints below.
 
-use rune::{Cx, El, col, el, row, text};
+use rune::{Cursor, Cx, El, col, el, row, text};
 
 use skinpulse::logic::config::ViewKind;
 
 use super::app::App;
 use super::theme::{GUTTER, Tokens};
-use super::watchlist;
+use super::{dialogs, portfolio, watchlist};
 
 pub fn view(s: &App, cx: &mut Cx<App>) -> El {
     let t = Tokens::new(cx.system_dark());
@@ -17,9 +17,11 @@ pub fn view(s: &App, cx: &mut Cx<App>) -> El {
         .min_h(0.0)
         .fill(t.kit.c.page)
         .child(top_bar(s, &t))
-        .child(watchlist::view(s, &t))
+        .child(if s.ui.view == ViewKind::Watchlist { watchlist::view(s, &t) } else { portfolio::view(s, &t) })
         .child(hints(s, &t));
-    rune_kit::root(body, [])
+    let mut layer = Vec::new();
+    dialogs::layer(s, &t, &mut layer);
+    rune_kit::root(body, layer)
 }
 
 fn top_bar(s: &App, t: &Tokens) -> El {
@@ -35,54 +37,64 @@ fn top_bar(s: &App, t: &Tokens) -> El {
                 .key("views")
                 .gap(16.0)
                 .center_y()
-                .child(tab("Watchlist", s.ui.view == ViewKind::Watchlist, t))
-                .child(tab("Portfolio", s.ui.view == ViewKind::Portfolio, t)),
+                .child(tab("Watchlist", ViewKind::Watchlist, s, t))
+                .child(tab("Portfolio", ViewKind::Portfolio, s, t)),
         )
         .child(status(s, t))
 }
 
-fn tab(label: &'static str, selected: bool, t: &Tokens) -> El {
+fn tab(label: &'static str, view: ViewKind, s: &App, t: &Tokens) -> El {
     let c = &t.kit.c;
-    text(label)
+    let selected = s.ui.view == view;
+    row()
         .key(label)
-        .font(if selected { t.kit.ty.ui_medium } else { t.kit.ty.ui })
-        .color(if selected { c.text_base } else { c.text_faint })
+        .role("tab")
+        .label(label)
+        .focusable(true)
+        .cursor(Cursor::Pointer)
+        .on_press(move |s: &mut App| s.set_view(view))
+        .child(text(label).font(if selected { t.kit.ty.ui_medium } else { t.kit.ty.ui }).color(if selected { c.text_base } else { c.text_faint }))
 }
 
 fn status(s: &App, t: &Tokens) -> El {
     let c = &t.kit.c;
-    let line = if s.schedule.loading() {
-        "Refreshing…".to_string()
-    } else {
-        match s.schedule.seconds_until_next(s.now) {
-            Some(left) => {
-                let left = left as u64;
-                format!("Next {}:{:02}", left / 60, left % 60)
-            }
-            None => "No data yet".to_string(),
-        }
-    };
-    let mut bar = row().key("status").gap(12.0).center_y();
-    if let Some(error) = &s.error {
-        bar = bar.child(text(error.clone()).font(t.kit.ty.text_small).color(t.down).truncate().shrink().min_w(0.0));
+    let mut bar = row().key("status").gap(12.0).center_y().min_w(0.0).shrink();
+    if let Some(error) = s.error_status() {
+        bar = bar.child(text(error).font(t.kit.ty.text_small).color(t.down).truncate().shrink().min_w(0.0));
+    } else if let Some((notice, _)) = &s.notice {
+        bar = bar.child(text(notice.clone()).font(t.kit.ty.text_small).color(c.text_muted).truncate().shrink().min_w(0.0));
     }
-    bar.child(text(line).font(t.number).color(c.text_muted))
+    bar.child(text(s.refresh_status()).font(t.number).color(c.text_muted).single_line())
 }
 
 fn hints(s: &App, t: &Tokens) -> El {
     let mut keys = row().key("keys").gap(16.0).center_y();
-    for (key, what) in [("a", "add"), ("d", "delete"), ("i", "import"), ("e", "export"), ("r", "refresh"), ("p", "portfolio"), ("1–7", "sort"), ("q", "quit")] {
+    let hints: &[(&str, &str)] = if s.ui.view == ViewKind::Watchlist {
+        &[("a", "add"), ("d", "delete"), ("i", "import"), ("e", "export"), ("r", "refresh"), ("p", "portfolio"), ("1–7", "sort"), ("s", "settings"), ("q", "quit")]
+    } else {
+        &[("r", "refresh"), ("p", "watchlist"), ("1–7", "sort"), ("s", "settings"), ("q", "quit")]
+    };
+    for (key, what) in hints {
         keys = keys.child(
             row()
-                .key(what)
+                .key(*what)
                 .gap(5.0)
                 .center_y()
-                .child(text(key).font(t.number).color(t.kit.c.text_muted))
-                .child(text(what).font(t.kit.ty.text_small).color(t.kit.c.text_faint)),
+                .child(text(*key).font(t.number).color(t.kit.c.text_muted))
+                .child(text(*what).font(t.kit.ty.text_small).color(t.kit.c.text_faint)),
         );
     }
-    let position = s.table.cursor().and_then(|id| s.rows.iter().position(|r| r.id == id)).map_or(0, |i| i + 1);
-    let count = format!("{position}/{}", s.rows.len());
+    let (cursor, total, at) = if s.ui.view == ViewKind::Watchlist {
+        let at = s.table.cursor().and_then(|id| s.rows.iter().position(|r| r.id == id));
+        (s.table.cursor(), s.rows.len(), at)
+    } else {
+        let at = s.portfolio_table.cursor().and_then(|id| s.holdings.iter().position(|(_, h)| h == id));
+        (s.portfolio_table.cursor(), s.holdings.len(), at)
+    };
+    let count = match (cursor, at) {
+        (Some(_), Some(at)) => format!("{}/{total}", at + 1),
+        _ => format!("{total}"),
+    };
     col()
         .key("footer")
         .w_full()

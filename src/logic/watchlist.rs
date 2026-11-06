@@ -92,6 +92,15 @@ impl Watchlist {
         found.is_some()
     }
 
+    /// Removes the item at this position in file order, leaving every other line as it was.
+    pub fn remove_at(&mut self, index: usize) -> Option<Item> {
+        let line = self.lines.iter().enumerate().filter(|(_, line)| matches!(line, Line::Item { .. })).nth(index)?.0;
+        match self.lines.remove(line) {
+            Line::Item { item, .. } => Some(item),
+            Line::Other(_) => None,
+        }
+    }
+
     /// Reads text to import and sorts its lines into what would change, without changing anything.
     pub fn preview_import(&self, text: &str) -> ImportPreview {
         let mut seen: HashSet<String> = self.items().map(Item::market_hash_name).collect();
@@ -207,6 +216,14 @@ mod tests {
         assert!(w.remove(&parsed("AK-47 | Redline, Field-Tested")));
         assert_eq!(w.to_text(), "# rifles\n\n# knives\n★ Karambit | Fade, Factory New\nM4A1-S | Printstream\n");
         assert!(!w.remove(&parsed("AK-47 | Redline, Field-Tested")));
+    }
+
+    #[test]
+    fn removing_by_position_takes_that_line_when_two_read_the_same() {
+        let mut w = Watchlist::parse("AK-47 | Redline, ft\n# note\nAK-47 | Redline, Field-Tested\n");
+        assert_eq!(w.remove_at(1), Some(parsed("AK-47 | Redline, ft")));
+        assert_eq!(w.to_text(), "AK-47 | Redline, ft\n# note\n");
+        assert_eq!(w.remove_at(5), None);
     }
 
     #[test]
