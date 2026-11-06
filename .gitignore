@@ -1,0 +1,8 @@
+/target
+config.json
+items.txt
+prices.json
+portfolio.json
+state.json
+*.png
+!docs/**/*.png

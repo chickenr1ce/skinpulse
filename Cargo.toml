@@ -1,0 +1,33 @@
+[package]
+name = "skinpulse"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+description = "Native desktop app for tracking CS2 skin prices, built with Rune."
+repository = "https://github.com/chickenr1ce/skinpulse"
+
+[lib]
+name = "skinpulse"
+path = "src/lib.rs"
+
+[[bin]]
+name = "skinpulse"
+path = "src/main.rs"
+
+[dependencies]
+rune = { git = "https://github.com/anomalyco/rune", rev = "781e2b6d87cd5f32d6f4365956fad4baaf24ee50", features = ["native-file-dialog"] }
+rune-kit = { git = "https://github.com/anomalyco/rune", rev = "781e2b6d87cd5f32d6f4365956fad4baaf24ee50" }
+dirs = "6"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+ureq = { version = "3", default-features = false, features = ["rustls"] }
+
+[dev-dependencies]
+tempfile = "3"
+
+[profile.dev.package."*"]
+debug = false
+
+[profile.release]
+codegen-units = 16
+strip = true
